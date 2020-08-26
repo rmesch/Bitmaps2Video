@@ -1,0 +1,91 @@
+object Form1: TForm1
+  Left = 0
+  Top = 0
+  Caption = 'Form1'
+  ClientHeight = 310
+  ClientWidth = 224
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  OnCreate = FormCreate
+  DesignerMasterStyle = 0
+  object Button1: TButton
+    Position.X = 8.000000000000000000
+    Position.Y = 220.000000000000000000
+    Size.Width = 167.000000000000000000
+    Size.Height = 44.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 1
+    Text = 'Make a Movie'
+    OnClick = Button1Click
+  end
+  object Label2: TLabel
+    Position.X = 14.000000000000000000
+    Position.Y = 78.000000000000000000
+    Size.Width = 165.000000000000000000
+    Size.Height = 23.000000000000000000
+    Size.PlatformDefault = False
+    Text = 'Frame rate:'
+    TabOrder = 4
+  end
+  object RateCombo: TComboBox
+    Items.Strings = (
+      '25'
+      '30'
+      '40'
+      '50'
+      '60')
+    ItemIndex = 1
+    Position.X = 16.000000000000000000
+    Position.Y = 106.000000000000000000
+    Size.Width = 69.000000000000000000
+    Size.Height = 32.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 5
+  end
+  object SD: TSaveDialog
+    DefaultExt = 'avi'
+    Filter = 'Avi-Videos (*.avi)|*.avi|Mp4-Videos(*.mp4)|*.mp4'
+    FilterIndex = 2
+    Left = 180
+    Top = 232
+  end
+  object Label1: TLabel
+    Position.X = 20.000000000000000000
+    Position.Y = 10.000000000000000000
+    Text = 'Quality'
+    TabOrder = 7
+  end
+  object SpinBox1: TSpinBox
+    Touch.InteractiveGestures = [LongTap, DoubleTap]
+    TabOrder = 8
+    Cursor = crIBeam
+    DecimalDigits = 0
+    Value = 50.000000000000000000
+    Position.X = 16.000000000000000000
+    Position.Y = 40.000000000000000000
+  end
+  object Label3: TLabel
+    Position.X = 18.000000000000000000
+    Position.Y = 148.000000000000000000
+    Text = 'Encoder:'
+    TabOrder = 9
+  end
+  object CodecCombo: TComboBox
+    Position.X = 16.000000000000000000
+    Position.Y = 176.000000000000000000
+    Size.Width = 161.000000000000000000
+    Size.Height = 32.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 10
+  end
+  object ProgressBar1: TProgressBar
+    Max = 30000.000000000000000000
+    Orientation = Horizontal
+    Position.X = 14.000000000000000000
+    Position.Y = 278.000000000000000000
+    Size.Width = 173.000000000000000000
+    Size.Height = 25.000000000000000000
+    Size.PlatformDefault = False
+  end
+end

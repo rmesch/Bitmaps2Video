@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{A846DF28-1130-43F9-8D26-B219CB01D39E}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="DemoWin\DemoBitmaps2Video.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="DemoMulti\MultiDemo.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="DemoBitmaps2Video">
+        <MSBuild Projects="DemoWin\DemoBitmaps2Video.dproj"/>
+    </Target>
+    <Target Name="DemoBitmaps2Video:Clean">
+        <MSBuild Projects="DemoWin\DemoBitmaps2Video.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DemoBitmaps2Video:Make">
+        <MSBuild Projects="DemoWin\DemoBitmaps2Video.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="MultiDemo">
+        <MSBuild Projects="DemoMulti\MultiDemo.dproj"/>
+    </Target>
+    <Target Name="MultiDemo:Clean">
+        <MSBuild Projects="DemoMulti\MultiDemo.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="MultiDemo:Make">
+        <MSBuild Projects="DemoMulti\MultiDemo.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="DemoBitmaps2Video;MultiDemo"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="DemoBitmaps2Video:Clean;MultiDemo:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="DemoBitmaps2Video:Make;MultiDemo:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
