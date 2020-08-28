@@ -7,7 +7,13 @@ uses
   System.Variants,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Layouts,
   FMX.ExtCtrls, FMX.StdCtrls, FMX.ListBox, FMX.Controls.Presentation, FMX.Edit,
-  FMX.EditBox, FMX.SpinBox;
+  FMX.EditBox,
+{$IFDEF ANDROID}
+  System.Permissions,
+  Androidapi.Jni.Os,
+  Androidapi.Helpers,
+{$ENDIF}
+  FMX.SpinBox;
 
 type
   TForm1 = class(TForm)
@@ -23,9 +29,16 @@ type
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
   private
-    { Private declarations }
+    FPermissionWriteExtStorage : string;
+
+    /// <summary>
+    ///   This event will be called when the user answers the request to grant
+    ///   the necessary write permission to the external storage
+    /// </summary>
+    procedure LocationPermissionRequestResult(Sender: TObject;
+      const APermissions: TArray<string>;
+      const AGrantResults: TArray<TPermissionStatus>);
   public
-    { Public declarations }
     procedure MakeMovie(const filename: string);
     procedure ShowProgress(Videotime: int64);
   end;
@@ -37,12 +50,18 @@ implementation
 
 {$R *.fmx}
 
-uses UFormatsM, UBitmaps2VideoM, FFMPEG, math;
+uses
+  UFormatsM, UBitmaps2VideoM, FFMPEG, math, IOUtils;
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
+  {$IFDEF ANDROID}
+  FPermissionWriteExtStorage := JStringToString(TJManifest_permission.JavaClass.WRITE_EXTERNAL_STORAGE);
+  PermissionsService.RequestPermissions([FPermissionWriteExtStorage], LocationPermissionRequestResult);
+  {$ELSE}
   if SD.Execute then
     MakeMovie(SD.filename);
+  {$ENDIF}
 end;
 
 procedure TForm1.FormCreate(Sender: TObject);
@@ -51,6 +70,17 @@ var
 begin
   ListSupportedCodecs('.mp4', CodecCombo.Items, Index);
   CodecCombo.ItemIndex := Index;
+end;
+
+procedure TForm1.LocationPermissionRequestResult(Sender: TObject;
+  const APermissions: TArray<string>;
+  const AGrantResults: TArray<TPermissionStatus>);
+begin
+  // Check whether the user has allowed writing to the file system
+  if (length(AGrantResults) > 0) and
+     (AGrantResults[0] = TPermissionStatus.Granted) and
+     (APermissions[0] = FPermissionWriteExtStorage) then
+    MakeMovie(TPath.Combine(TPath.GetSharedDownloadsPath, 'Video.mp4'));
 end;
 
 procedure TForm1.MakeMovie(const filename: string);
@@ -68,7 +98,7 @@ begin
   Height := 720;
   CodecID := AV_CODEC_ID_MJPEG;
   if CodecCombo.ItemIndex >= 0 then
-    CodecID := TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]);
+    CodecID := TAVCodecID(TCodecIdWrapper(CodecCombo.Items.Objects[CodecCombo.ItemIndex]).CodecId);
   FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
   FrameTime:=1/FrameRate;
   bme := TBitmapEncoderM.Create(filename, Width, Height, FrameRate,
