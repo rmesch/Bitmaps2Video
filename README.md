@@ -2,9 +2,13 @@
 A Delphi-class to support encoding of a series of bitmaps to a video file. It requires the ffmpeg-library and is intended as an easy to use interface to this library.
 
 There are 2 versions of the encoder class:
-    TBitmapEncoder for platforms Win32 and Win64 
-      relatively stable with H264, Mpeg-4, Mjpeg, Mpeg1/2 encoders and .avi, .mp4 containers 
+
+    TBitmapEncoder for platforms Win32 and Win64, 
+
+      relatively stable with H264, Mpeg-4, Mjpeg, Mpeg1/2 encoders and .avi, .mp4 containers.
+ 
     TBitmapEncoderM for cross platform with less features and less tested. 
+
       Demo currently working with Win32, Win64, Android, Android32, thanks to TurboMagic
 
 The cross platform demo requires at least Delphi 10.3.3 as it contains the necessary support for requesting permission to write to external storage at runtime.
