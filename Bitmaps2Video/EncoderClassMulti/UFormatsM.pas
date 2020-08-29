@@ -91,6 +91,25 @@ type
 
   TCodecSetupClass = class of TBaseCodecSetup;
 
+  /// <summary>
+  ///   Required for list Supported codecs on ARC enabled Delphi versions, as
+  ///   storing integers/sets typecasted to TObject leads to crashes there
+  ///   as the, in such a case non existing, reference counting mechanism is
+  ///   to be called.
+  /// </summary>
+  TCodecIdWrapper = class(TObject)
+  strict private
+    FCodecId: TAVCodecId;
+  public
+    constructor Create(CodecId: TAVCodecId);
+
+    /// <summary>
+    ///   The "wrapped" CodeId
+    /// </summary>
+    property CodecId: TAVCodecId
+      read   FCodecId;
+  end;
+
 function GetOutputFormat(const Ext: string): PAVOutputFormat;
 
 /// <summary> Use to list the short names of the codecs supported by the file format defined by Ext.
@@ -212,12 +231,11 @@ begin
       Codec := avcodec_find_encoder(CodecId);
       if Codec <> nil then
       begin
-        Strings.AddObject(String(Codec.name), TObject(CodecId));
+        Strings.AddObject(String(Codec.name), TCodecIdWrapper.Create(CodecId));
         if PreferredCodec(Ext) = CodecId then
           IndexOfPreferredCodec := Strings.Count - 1;
       end;
     end;
-
 end;
 
 procedure ListSupportedFileFormats(const Strings: TStrings);
@@ -342,6 +360,15 @@ begin
   Assert(ret >= 0, 'av_dict_set error ' + inttostr(ret));
 //   ret := av_dict_set(@fpopt, 'tune', 'animation', 0);
 //  Assert(ret >= 0, 'av_dict_set error ' + inttostr(ret));
+end;
+
+{ TCodecIdWrapper }
+
+constructor TCodecIdWrapper.Create(CodecId: TAVCodecId);
+begin
+  inherited Create;
+
+  FCodecId := COdecId;
 end;
 
 initialization

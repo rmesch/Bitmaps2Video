@@ -10,9 +10,9 @@ object Form1: TForm1
   OnCreate = FormCreate
   DesignerMasterStyle = 0
   object Button1: TButton
-    Position.X = 8.000000000000000000
+    Position.X = 16.000000000000000000
     Position.Y = 220.000000000000000000
-    Size.Width = 167.000000000000000000
+    Size.Width = 159.000000000000000000
     Size.Height = 44.000000000000000000
     Size.PlatformDefault = False
     TabOrder = 1
@@ -84,7 +84,7 @@ object Form1: TForm1
     Orientation = Horizontal
     Position.X = 14.000000000000000000
     Position.Y = 278.000000000000000000
-    Size.Width = 173.000000000000000000
+    Size.Width = 163.000000000000000000
     Size.Height = 25.000000000000000000
     Size.PlatformDefault = False
   end
