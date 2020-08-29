@@ -51,7 +51,8 @@ implementation
 {$R *.fmx}
 
 uses
-  UFormatsM, UBitmaps2VideoM, FFMPEG, math, IOUtils;
+  UFormatsM, UBitmaps2VideoM, FFMPEG,
+  math, IOUtils, System.Threading;
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
@@ -80,7 +81,9 @@ begin
   if (length(AGrantResults) > 0) and
      (AGrantResults[0] = TPermissionStatus.Granted) and
      (APermissions[0] = FPermissionWriteExtStorage) then
+  begin
     MakeMovie(TPath.Combine(TPath.GetSharedDownloadsPath, 'Video.mp4'));
+  end;
 end;
 
 procedure TForm1.MakeMovie(const filename: string);
@@ -93,42 +96,53 @@ var
   FrameTime: double;
   CodecID: TAVCodecID;
   FrameRate: integer;
-begin
-  Width := 1080;
-  Height := 720;
-  CodecID := AV_CODEC_ID_MJPEG;
-  if CodecCombo.ItemIndex >= 0 then
-    CodecID := TAVCodecID(TCodecIdWrapper(CodecCombo.Items.Objects[CodecCombo.ItemIndex]).CodecId);
-  FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
-  FrameTime:=1/FrameRate;
-  bme := TBitmapEncoderM.Create(filename, Width, Height, FrameRate,
-    trunc(SpinBox1.Value), CodecID, vsBicubic);
-  try
-    bme.OnProgress:=ShowProgress;
-    PeriodRed := 1/8;
-    PeriodGreen := 1/10.4; //actually 1/period
-    PeriodBlue := 1/12.7;
-    t := 0;
-    // 30seconds of movie
-    While t < 30 do
-    begin
-      TheColor.Red:=Trunc(127*(sin(2*Pi*PeriodRed*t)+1.01));
-      TheColor.Green:=Trunc(127*(sin(2*Pi*PeriodGreen*t)+1.01));
-      TheColor.Blue:=Trunc(127*(sin(2*Pi*PeriodBlue*t)+1.01));
-      bme.AddColorFrame(TheColor);
-      t:=t+FrameTime;
-    end;
-    bme.CloseFile;
-  finally
-    bme.free;
-  end;
 
+  aTask: ITask;
+begin
+  aTask := TTask.Create(
+    procedure
+    begin
+      Width := 1080;
+      Height := 720;
+      CodecID := AV_CODEC_ID_MJPEG;
+      if CodecCombo.ItemIndex >= 0 then
+        CodecID := TAVCodecID(TCodecIdWrapper(CodecCombo.Items.Objects[CodecCombo.ItemIndex]).CodecId);
+      FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
+      FrameTime:=1/FrameRate;
+      bme := TBitmapEncoderM.Create(filename, Width, Height, FrameRate,
+        trunc(SpinBox1.Value), CodecID, vsBicubic);
+      try
+        bme.OnProgress:=ShowProgress;
+        PeriodRed := 1/8;
+        PeriodGreen := 1/10.4; //actually 1/period
+        PeriodBlue := 1/12.7;
+        t := 0;
+        // 30seconds of movie
+        While t < 30 do
+        begin
+          TheColor.Red:=Trunc(127*(sin(2*Pi*PeriodRed*t)+1.01));
+          TheColor.Green:=Trunc(127*(sin(2*Pi*PeriodGreen*t)+1.01));
+          TheColor.Blue:=Trunc(127*(sin(2*Pi*PeriodBlue*t)+1.01));
+          bme.AddColorFrame(TheColor);
+          t:=t+FrameTime;
+        end;
+        bme.CloseFile;
+      finally
+        bme.free;
+      end;
+    end);
+    aTask.Start;
 end;
 
 procedure TForm1.ShowProgress(Videotime: int64);
 begin
-  Progressbar1.Value:=VideoTime;
-  Progressbar1.Repaint;
+  TThread.Synchronize(TThread.Current,
+    procedure
+    begin
+      Progressbar1.Value:=VideoTime;
+    end);
+
+//  Progressbar1.Repaint;
 end;
 
 end.
