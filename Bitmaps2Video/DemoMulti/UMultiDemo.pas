@@ -29,6 +29,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
   private
+    {$IFDEF ANDROID}
     FPermissionWriteExtStorage : string;
 
     /// <summary>
@@ -38,6 +39,7 @@ type
     procedure LocationPermissionRequestResult(Sender: TObject;
       const APermissions: TArray<string>;
       const AGrantResults: TArray<TPermissionStatus>);
+    {$ENDIF}
   public
     procedure MakeMovie(const filename: string);
     procedure ShowProgress(Videotime: int64);
@@ -73,6 +75,7 @@ begin
   CodecCombo.ItemIndex := Index;
 end;
 
+{$IFDEF ANDROID}
 procedure TForm1.LocationPermissionRequestResult(Sender: TObject;
   const APermissions: TArray<string>;
   const AGrantResults: TArray<TPermissionStatus>);
@@ -85,6 +88,7 @@ begin
     MakeMovie(TPath.Combine(TPath.GetSharedDownloadsPath, 'Video.mp4'));
   end;
 end;
+{$ENDIF}
 
 procedure TForm1.MakeMovie(const filename: string);
 var
