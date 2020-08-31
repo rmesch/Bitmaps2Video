@@ -117,9 +117,7 @@ type
     property OnProgress: TVideoProgressEvent read fOnProgress write fOnProgress;
     // Application.Processmessages can be called safely in this event (I hope).
 
-    // Audio must be added by muxing, see below
-    // Threads: Seems to be threadsafe when an instance is not used across threads
-    // Canvas procedures must be protected by Lock/Unlock.
+    
   end;
 
 
