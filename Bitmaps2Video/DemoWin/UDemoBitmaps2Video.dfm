@@ -164,10 +164,8 @@ object Form1: TForm1
     ActivePage = TabSheet1
     Align = alBottom
     TabOrder = 8
-    ExplicitWidth = 505
     object TabSheet1: TTabSheet
       Caption = 'Zooming'
-      ExplicitTop = 26
       object Image1: TImage
         Left = 9
         Top = 10
@@ -260,7 +258,6 @@ object Form1: TForm1
     object TabSheet2: TTabSheet
       Caption = 'Inserting an existing video'
       ImageIndex = 1
-      ExplicitWidth = 497
       object Label11: TLabel
         Left = 0
         Top = 98
@@ -308,8 +305,6 @@ object Form1: TForm1
     object TabSheet3: TTabSheet
       Caption = 'Create from Video'
       ImageIndex = 2
-      ExplicitLeft = 6
-      ExplicitTop = 22
       DesignSize = (
         540
         197)
@@ -398,7 +393,6 @@ object Form1: TForm1
     object TabSheet4: TTabSheet
       Caption = 'Add Audio'
       ImageIndex = 3
-      ExplicitTop = 22
       object Label5: TLabel
         Left = 20
         Top = 59
@@ -476,7 +470,7 @@ object Form1: TForm1
   object OVD: TOpenDialog
     Filter = 
       'Video Files (*.avi *.mp4 *.mkv*.mpg)|*.avi;*.mp4;*.mkv;*.mpg| An' +
-      'y File'
+      'y File|*.*'
     Left = 474
     Top = 162
   end
