@@ -10,6 +10,8 @@
   KIND, either express or implied.  See the License for the
   specific language governing permissions and limitations
   under the License.
+
+  Copyright 2020 Renate Schaaf
 *****************************************************************************}
 unit UTools;
 
@@ -49,6 +51,7 @@ function ScaleRect(SourceR: TRectF; fact: double): TRectF; inline;
 ///  <param name="BigR"> (TRectF) Rect to center aRect in </param>
 procedure CenterRect(var aRect: TRectF; BigR: TRectF); inline
 
+///<summary> Convert frame number FrameNumber of a video file into a bitmap </summary>
 procedure GrabFrame(const bm: TBitmap; const Videofile: string;FrameNumber: integer);
 
 procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;
@@ -157,8 +160,6 @@ begin
 
   open_decoder_context(@video_stream_idx, @video_dec_ctx, fmt_ctx,
     AVMEDIA_TYPE_VIDEO);
-
-  //video_stream := PPtrIdx(fmt_ctx.streams, video_stream_idx);
 
   (* allocate image where the decoded image will be put *)
   width := video_dec_ctx.width;

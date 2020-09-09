@@ -10,6 +10,8 @@
   KIND, either express or implied.  See the License for the
   specific language governing permissions and limitations
   under the License.
+
+  Copyright 2020 Renate Schaaf
 *****************************************************************************}
 unit UFormats;
 
@@ -45,7 +47,6 @@ type
   /// <summary> Base class of classes that know how to set up properties for a given codec. </summary>
   TBaseCodecSetup = class
   private
-    function GetPixelformat: TAVPixelformat;
     function GetCodec: PAVCodec;
   protected
     fPreferredOutputPixelformat: TAVPixelformat;
@@ -60,7 +61,7 @@ type
     /// <summary> Override to translate quality to bitrate for the codec </summary>
     function QualityToBitrate(Quality: byte; Width, Height, Rate: integer)
       : int64; virtual;
-    property OutputPixelFormat: TAVPixelformat read GetPixelformat;
+    property OutputPixelFormat: TAVPixelformat read fPreferredOutputPixelformat;
     property Codec: PAVCodec read GetCodec;
     property OptionsDictionary: PAVDictionary read fpopt;
   end;
@@ -117,9 +118,17 @@ function CodecSetupClass(CodecId: TAVCodecId): TCodecSetupClass;
 function RegisterEncoder(CodecId: TAVCodecId;
  CodecSetupClass: TCodecSetupClass; OverwriteIfExists: boolean): boolean;
 
+function AVRational(num,den: integer):TAVRational; inline;
+
 implementation
 
 uses System.Generics.Collections;
+
+function AVRational(num,den: integer):TAVRational; inline;
+begin
+  Result.num:=num;
+  Result.den:=den;
+end;
 
 var
   /// <Summary> Used to find the encoder setup class for a given codec-id. Use the RegisterEncoder procedure to support more codecs. </summary>
@@ -246,18 +255,10 @@ begin
 end;
 
 function TBaseCodecSetup.GetCodec: PAVCodec;
-var
-  Codec: PAVCodec;
 begin
-  Codec := avcodec_find_encoder(fCodecId);
-  if Codec = nil then
+  Result := avcodec_find_encoder(fCodecId);
+  if Result = nil then
     raise ECodecException.Create('Codec not found');
-  Result := Codec;
-end;
-
-function TBaseCodecSetup.GetPixelformat: TAVPixelformat;
-begin
-  Result := fPreferredOutputPixelformat;
 end;
 
 function TBaseCodecSetup.QualityToBitrate(Quality: byte;
@@ -340,7 +341,7 @@ begin
 end;
 
 initialization
-
+avcodec_register_all();
 av_register_all();
 MakeEncoderDictionary;
 

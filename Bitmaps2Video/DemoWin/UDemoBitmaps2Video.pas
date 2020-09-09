@@ -13,8 +13,6 @@ uses
 type
   TForm1 = class(TForm)
     Edit1: TEdit;
-    Image1: TImage;
-    Button1: TButton;
     Button2: TButton;
     Label1: TLabel;
     SD: TSaveDialog;
@@ -22,14 +20,8 @@ type
     Label2: TLabel;
     Label3: TLabel;
     HC: TComboBox;
-    Label4: TLabel;
-    rgrpZoom: TRadioGroup;
-    ProgressBar1: TProgressBar;
-    Button3: TButton;
     OPD: TOpenPictureDialog;
-    Button4: TButton;
     OD: TOpenDialog;
-    Label5: TLabel;
     Label6: TLabel;
     CodecCombo: TComboBox;
     Label7: TLabel;
@@ -37,7 +29,32 @@ type
     Label8: TLabel;
     FormatCombo: TComboBox;
     Button5: TButton;
+    OVD: TOpenDialog;
+    PageControl1: TPageControl;
+    TabSheet1: TTabSheet;
+    TabSheet2: TTabSheet;
+    TabSheet3: TTabSheet;
+    TabSheet4: TTabSheet;
+    Image1: TImage;
+    Button3: TButton;
+    rgrpZoom: TRadioGroup;
+    Button1: TButton;
+    Label4: TLabel;
+    ProgressBar1: TProgressBar;
     Label9: TLabel;
+    Button7: TButton;
+    Button6: TButton;
+    Button4: TButton;
+    Label5: TLabel;
+    Label10: TLabel;
+    RadioGroup1: TRadioGroup;
+    Label11: TLabel;
+    Label12: TLabel;
+    Label13: TLabel;
+    Label14: TLabel;
+    Memo1: TMemo;
+    Label15: TLabel;
+    Label16: TLabel;
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -49,12 +66,15 @@ type
     procedure RateComboChange(Sender: TObject);
     procedure SpinEdit1Change(Sender: TObject);
     procedure CodecComboChange(Sender: TObject);
+    procedure Button6Click(Sender: TObject);
+    procedure Button7Click(Sender: TObject);
   private
     procedure UpdateCodecCombo;
     procedure UpdateSizeinMB;
     { Private declarations }
   public
     { Public declarations }
+    VideoAspect: double;
     procedure UpdateVideo(Videotime: int64);
   end;
 
@@ -75,6 +95,8 @@ implementation
 {$R *.dfm}
 
 uses mmSystem, System.Types, math, UTools, Winapi.ShlObj, Winapi.ActiveX;
+
+const Aspects: array[0..2] of double = (16/9, 4/3, 3/2);
 
 function PIDLToPath(IdList: PItemIDList): string;
 begin
@@ -121,7 +143,6 @@ var
   bm: TBitmap;
   bme: TBitmapEncoder;
   h, w, bw, bh: integer;
-  asp: double;
   t: int64;
   fps: double;
   ZoomTarget, ZoomSource, ZoomTarget2: TRectF;
@@ -133,6 +154,7 @@ begin
     Vcl.Dialogs.ShowMessage('Load a picture first');
     exit;
   end;
+  VideoAspect:=Aspects[RadioGroup1.ItemIndex];
   t := TimeGetTime;
   bm := TBitmap.Create;
   try
@@ -141,14 +163,13 @@ begin
 
     bw := bm.Width;
     bh := bm.Height;
-    asp := bw / bh;
     h := StrToInt(HC.Text);
-    w := round(h * asp);
+    w := round(h * VideoAspect);
     if odd(w) then
       w := w - 1;
     ZoomSource := RectF(0, 0, bw, bh);
     ZoomTarget2 := ScaleRect(ZoomSource, 0.5);
-    OffsetRect(ZoomTarget2, random(w div 2), random(h div 2));
+    OffsetRect(ZoomTarget2, random(bw div 2), random(bh div 2));
     ZoomTarget := ScaleRect(ZoomSource, 0.3);
     CenterRect(ZoomTarget, ZoomSource);
     ZoomOption := zoAAx2; // eliminate compiler warning
@@ -170,7 +191,7 @@ begin
 
     try
       bme.OnProgress := UpdateVideo;
-
+      ProgressBar1.Position := 0;
       // 30 seconds of movie
       bme.AddStillImage(bm, 2000);
 
@@ -248,6 +269,94 @@ begin
   UpdateCodecCombo;
 end;
 
+procedure TextOnBitmap(const bm: TBitmap; const _text: string);
+var
+  r: TRect;
+  r1: TRectF;
+begin
+  bm.Canvas.Font.Color := clWhite;
+  bm.Canvas.Brush.style := bsClear;
+  bm.Canvas.Font.Size := 32;
+  r := Rect(0, 0, bm.Width, bm.Height);
+  DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r,
+    dt_Center or dt_CalcRect);
+  r1 := TRectF(r);
+  CenterRect(r1, RectF(0, 0, bm.Width, bm.Height));
+  r := r1.round;
+  DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r, dt_Center);
+end;
+
+procedure TForm1.Button6Click(Sender: TObject);
+var
+  bme: TBitmapEncoder;
+  bm: TBitmap;
+  
+begin
+  if not OVD.Execute then
+    exit;
+  Label15.Caption:='Working';
+  Label15.Repaint;
+  bme := TBitmapEncoder.CreateFromVideo(OVD.FileName, Edit1.Text, vsBiCubic);
+  try
+    bm := TBitmap.Create;
+    try
+      bm.Width := bme.VideoWidth;
+      bm.Height := bme.VideoHeight;
+      BitBlt(bm.Canvas.Handle, 0, 0, bm.Width, bm.Height, 0, 0, 0, BLACKNESS);
+      TextOnBitmap(bm,'End Slide Added');
+      bme.AddStillImage(bm, 4000);
+    finally
+      bm.Free;
+    end;
+    bme.CloseFile;
+  finally
+    bme.Free;
+  end;
+  Label15.Caption:='Done';
+end;
+
+
+procedure TForm1.Button7Click(Sender: TObject);
+var
+  bm: TBitmap;
+  bme: TBitmapEncoder;
+  w, h: integer;
+begin
+  if not OVD.Execute then
+    exit;
+  VideoAspect:=Aspects[Radiogroup1.ItemIndex];
+  bm := TBitmap.Create;
+  try
+    //load the 1st frame from the video
+    GrabFrame(bm, OVD.FileName, 1);
+    h := StrToInt(HC.Text);
+    w := round(VideoAspect * h);
+    //video sizes must be even
+    if odd(w) then
+      dec(w);
+    Label12.Caption:='Working';
+    Label12.Repaint;
+    bme := TBitmapEncoder.Create(Edit1.Text + FormatCombo.Text, w, h,
+      StrToInt(RateCombo.Text), SpinEdit1.Value,
+      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic);
+    try
+      TextOnBitmap(bm,'Intro Screen');
+      bme.AddStillImage(bm, 5000);
+      bme.AddVideo(OVD.FileName);
+      //bme.LastVideoFrameCount always contains the frame count of the last
+      //added video.
+      GrabFrame(bm, OVD.FileName,bme.LastVideoFrameCount-2);
+      TextOnBitmap(bm,'The End');
+      bme.AddStillImage(bm,5000);
+      bme.CloseFile;
+    finally
+      bme.Free;
+    end;
+  finally
+    bm.Free;
+  end;
+  Label12.Caption:='Done';
+end;
 
 procedure TForm1.CodecComboChange(Sender: TObject);
 begin
@@ -267,7 +376,7 @@ procedure TForm1.UpdateSizeinMB;
 var
   VideoWidth: integer;
 begin
-  if (Image1.Picture = nil) or (Image1.Picture.Height=0) then
+  if (Image1.Picture = nil) or (Image1.Picture.Height = 0) then
     exit;
   VideoWidth := round(StrToInt(HC.Text) * Image1.Picture.Width /
     Image1.Picture.Height);
@@ -291,6 +400,7 @@ begin
   if FileExists('GoodTestPicture.png') then
     Image1.Picture.LoadFromFile('GoodTestPicture.png');
   UpdateSizeinMB;
+  VideoAspect:=16/9;
   Randomize;
 end;
 
