@@ -12,8 +12,7 @@ There are 2 versions of the encoder class:
 The cross platform demo requires at least Delphi 10.3.3 as it contains the necessary support for requesting permission to write to external storage at runtime.
 The video created on Android is stored in public downloads folder and the Androi demo compiles for both 32 and 64 bit.
 
-Shared objects for iOS are supplied, but none of the current developers has a working iOS development setup so they have not been added to the deployment 
-manager and it has thus also not been tested on iOS yet. Feel free to do so and create a pull request once you succeeded.
+Shared objects for iOS are supplied, but none of the current developers has a working iOS development setup so they have not been added to the deployment manager and it has thus also not been tested on iOS yet. Feel free to do so and create a pull request once you succeeded.
 
 Win-version: Methods no longer return booleans for success/failure, exceptions are thrown instead. Error handling needs to be improved. The method AddVideo now works with different frame rates, too. The added constructor CreateFromVideo still has some problems. Ideas, reports, fixes most welcome. Problems are described in more detail in the demo.
 
