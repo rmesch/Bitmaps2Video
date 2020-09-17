@@ -250,7 +250,7 @@ object Form1: TForm1
         Top = 56
         Width = 139
         Height = 19
-        Max = 29000
+        Max = 20000
         MarqueeInterval = 100
         TabOrder = 3
       end

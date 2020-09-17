@@ -1,9 +1,9 @@
-{*****************************************************************************
+{ *****************************************************************************
   This file is licensed to you under the Apache License, Version 2.0 (the
   "License"); you may not use this file except in compliance
   with the License. A copy of this licence is found in the root directory of
   this project in the file LICENCE.txt or alternatively at
-    http://www.apache.org/licenses/LICENSE-2.0
+  http://www.apache.org/licenses/LICENSE-2.0
   Unless required by applicable law or agreed to in writing,
   software distributed under the License is distributed on an
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -12,7 +12,7 @@
   under the License.
 
   Copyright 2020 Renate Schaaf
-*****************************************************************************}
+  ***************************************************************************** }
 unit UTools;
 
 interface
@@ -35,29 +35,31 @@ procedure ZoomDeleteScansTripleOnly(const Src, Dest: TBitmap; rs: TRectF);
 
 // TRectF utility functions
 
-///<summary> Compute an in between rect of SourceR and TargetR </summary>
-///  <param name="SourceR"> TRectF </param>
-///  <param name="TargetR"> TRectF </param>
-///  <param name="t"> Double between 0 and 1. Weight Source is t, weight Target is 1-t </param>
+/// <summary> Compute an in between rect of SourceR and TargetR </summary>
+/// <param name="SourceR"> TRectF </param>
+/// <param name="TargetR"> TRectF </param>
+/// <param name="t"> Double between 0 and 1. Weight Source is t, weight Target is 1-t </param>
 function Interpolate(SourceR, TargetR: TRectF; t: double): TRectF; inline;
 
-///<summary> Scale a TRectF by a factor </summary>
-///  <param name="SourceR"> TRectF </param>
-///  <param name="fact"> Scaling factor (e.g. 2 doubles the size) </param>
+/// <summary> Scale a TRectF by a factor </summary>
+/// <param name="SourceR"> TRectF </param>
+/// <param name="fact"> Scaling factor (e.g. 2 doubles the size) </param>
 function ScaleRect(SourceR: TRectF; fact: double): TRectF; inline;
 
-///<summary> Center aRect in BigR </summary>
-///  <param name="aRect"> (TRectF) Input rect to modify </param>
-///  <param name="BigR"> (TRectF) Rect to center aRect in </param>
-procedure CenterRect(var aRect: TRectF; BigR: TRectF); inline
+/// <summary> Center aRect in BigR </summary>
+/// <param name="aRect"> (TRectF) Input rect to modify </param>
+/// <param name="BigR"> (TRectF) Rect to center aRect in </param>
+procedure CenterRect(var aRect: TRectF; BigR: TRectF);
+inline
 
-///<summary> Convert frame number FrameNumber of a video file into a bitmap </summary>
-procedure GrabFrame(const bm: TBitmap; const Videofile: string;FrameNumber: integer);
+/// <summary> Convert frame number FrameNumber of a video file into a bitmap </summary>
+procedure GrabFrame(const bm: TBitmap; const Videofile: string;
+  FrameNumber: integer);
 
 procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;
   fmt_ctx: PAVFormatContext; type_: TAVMediaType);
 
-//Zoom-Pan speed modifiers
+// Zoom-Pan speed modifiers
 function SlowSlow(t: double): double; inline;
 function SlowFast(t: double): double; inline;
 function FastSlow(t: double): double; inline;
@@ -68,7 +70,8 @@ function GetTempfolder: string;
 
 type
   TEnvelopeFunction = function(t: double): double;
-  TZoomSpeedEnvelope = (zeSlowSlow, zeFastSlow, zeSlowFast, zeLinear, zeExperiment);
+  TZoomSpeedEnvelope = (zeSlowSlow, zeFastSlow, zeSlowFast, zeLinear,
+    zeExperiment);
 
 const
   EnvelopeFunction: array [TZoomSpeedEnvelope] of TEnvelopeFunction = (SlowSlow,
@@ -76,8 +79,7 @@ const
 
 implementation
 
-uses math
-  ;
+uses math;
 
 // dec_ctx is allocated and must be freed. stream_idx^ contains the stream index for the type_
 procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;
@@ -87,15 +89,15 @@ var
   st: PAVStream;
   avdec: PAVCodec;
   opts: PAVDictionary;
-  p:PPAVStream;
+  p: PPAVStream;
 begin
   opts := nil;
 
   ret := av_find_best_stream(fmt_ctx, type_, -1, -1, nil, 0);
   assert(ret >= 0);
   stream_index := ret;
-  p:=fmt_ctx.streams;
-  inc(p,stream_index);
+  p := fmt_ctx.streams;
+  inc(p, stream_index);
   st := PAVStream(p^);
 
   (* find decoder for the stream *)
@@ -125,7 +127,7 @@ var
   video_dec_ctx: PAVCodecContext;
   width, height: integer;
   pix_fmt: TAVPixelFormat;
-  //video_stream: PAVStream;
+  // video_stream: PAVStream;
   video_stream_idx: integer;
   frame: PAVFrame;
   pkt: TAVPacket;
@@ -145,18 +147,19 @@ var
 begin
   fmt_ctx := nil;
   video_dec_ctx := nil;
- //video_stream := nil;
+  // video_stream := nil;
   frame := nil;
+  rgbPic := nil;
   for x := 0 to 3 do
     video_dst_data[x] := nil;
   (* open input file, and allocate format context *)
   ret := avformat_open_input(@fmt_ctx, PAnsiChar(AnsiString(Videofile)),
     nil, nil);
-  Assert(ret >= 0);
+  assert(ret >= 0);
 
   (* retrieve stream information *)
   ret := avformat_find_stream_info(fmt_ctx, nil);
-  Assert(ret >= 0);
+  assert(ret >= 0);
 
   open_decoder_context(@video_stream_idx, @video_dec_ctx, fmt_ctx,
     AVMEDIA_TYPE_VIDEO);
@@ -167,15 +170,15 @@ begin
   pix_fmt := video_dec_ctx.pix_fmt;
   ret := av_image_alloc(@video_dst_data[0], @video_dst_linesize[0], width,
     height, pix_fmt, 1);
-  Assert(ret >= 0);
+  assert(ret >= 0);
   // Conversion Context to BGR
   convertCtx := sws_getContext(width, height, pix_fmt, width, height,
     AV_PIX_FMT_BGR24, SWS_FAST_BILINEAR, nil, nil, nil);
   // Allocate storage for the rgb-frame
   rgbPic := av_frame_alloc();
-  Assert(rgbPic <> nil);
+  assert(rgbPic <> nil);
   frame := av_frame_alloc();
-  Assert(frame <> nil);
+  assert(frame <> nil);
   try
 
     rgbPic.Format := Ord(AV_PIX_FMT_BGR24);
@@ -190,40 +193,49 @@ begin
     video_frame_count := 0;
     (* read frame FrameNumber from the file *)
     ret := 0;
-    while (video_frame_count < FrameNumber) and (ret >= 0) do
+    while (video_frame_count < FrameNumber - 1) do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
-      Assert(ret >= 0);
+      assert(ret >= 0);
       if pkt.stream_index <> video_stream_idx then
       begin
         av_packet_unref(@pkt);
         Continue;
       end;
       inc(video_frame_count);
+      // without decoding each frame, the grabbing doesn't work
+      // except for some formats
+      got_frame := 0;
+      ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
+      assert(ret >= 0);
       av_packet_unref(@pkt);
     end;
-    while (video_frame_count = FrameNumber) and (ret >= 0) do
+    while (video_frame_count = FrameNumber - 1) do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
-      Assert(ret >= 0);
+      assert(ret >= 0);
       if pkt.stream_index <> video_stream_idx then
       begin
         av_packet_unref(@pkt);
         Continue;
       end;
       inc(video_frame_count);
+
     end;
-    Assert(pkt.stream_index = video_stream_idx);
+    assert(pkt.stream_index = video_stream_idx);
     (* decode video frame *)
+    // !avcodec_decode_video2 is deprecated, but I couldn't get
+    // the replacement avcode_send_packet and avcodec_receive_frame to work
     got_frame := 0;
     ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
-    Assert(ret >= 0);
+    assert(ret >= 0);
+
     // Convert the yuv-frame to rgb-frame
     ret := av_frame_make_writable(rgbPic);
-    Assert(ret >= 0);
+    assert(ret >= 0);
     ret := sws_scale(convertCtx, @frame.data, @frame.linesize, 0, height,
       @rgbPic.data, @rgbPic.linesize);
-    Assert(ret >= 0);
+    assert(ret >= 0);
     // Store the frame in a bmp
 
     bm.PixelFormat := pf32bit;
@@ -268,43 +280,43 @@ end;
 
 function Experiment(t: double): double; inline;
 begin
-  result:=0.5*sin(2*Pi*t)+t;
+  Result := 0.5 * sin(2 * Pi * t) + t;
 end;
 
 function SlowSlow(t: double): double; inline;
 begin
-  result := 3 * t * t - 2 * t * t * t;
+  Result := 3 * t * t - 2 * t * t * t;
 end;
 
 function SlowFast(t: double): double; inline;
 begin
-  result := t * t;
+  Result := t * t;
 end;
 
 function FastSlow(t: double): double; inline;
 begin
-  result := 2 * t - t * t;
+  Result := 2 * t - t * t;
 end;
 
 function Linear(t: double): double; inline;
 begin
-  result := t;
+  Result := t;
 end;
 
 function Interpolate(SourceR, TargetR: TRectF; t: double): TRectF;
 begin
-  result.Left := SourceR.Left + t * (TargetR.Left - SourceR.Left);
-  result.Top := SourceR.Top + t * (TargetR.Top - SourceR.Top);
-  result.Right := SourceR.Right + t * (TargetR.Right - SourceR.Right);
-  result.Bottom := SourceR.Bottom + t * (TargetR.Bottom - SourceR.Bottom);
+  Result.Left := SourceR.Left + t * (TargetR.Left - SourceR.Left);
+  Result.Top := SourceR.Top + t * (TargetR.Top - SourceR.Top);
+  Result.Right := SourceR.Right + t * (TargetR.Right - SourceR.Right);
+  Result.Bottom := SourceR.Bottom + t * (TargetR.Bottom - SourceR.Bottom);
 end;
 
 function ScaleRect(SourceR: TRectF; fact: double): TRectF;
 begin
-  result.Left := fact * SourceR.Left;
-  result.Top := fact * SourceR.Top;
-  result.Right := fact * SourceR.Right;
-  result.Bottom := fact * SourceR.Bottom;
+  Result.Left := fact * SourceR.Left;
+  Result.Top := fact * SourceR.Top;
+  Result.Right := fact * SourceR.Right;
+  Result.Bottom := fact * SourceR.Bottom;
 end;
 
 procedure CenterRect(var aRect: TRectF; BigR: TRectF);
@@ -340,13 +352,13 @@ function AntiMyFilter(x: double): double; inline;
 // Antiderivative of a filter function similar to bicubic, but I like it better
 begin
   if x < -1 then
-    result := -0.5
+    Result := -0.5
   else if x < 1 then
-    result := aa * x * x * x * x * x * x * x + bb * x * x * x * x * x + cc * x *
+    Result := aa * x * x * x * x * x * x * x + bb * x * x * x * x * x + cc * x *
       x * x + dd * x
 
   else
-    result := 0.5;
+    Result := 0.5;
 end;
 
 procedure MakeContributors(r: single; SourceSize, TargetSize: integer;
@@ -380,7 +392,7 @@ begin
     Mx := Max(Min(TrueMax, SourceSize - 1), 0);
     // make sure not to read past w1-1 in the source
     Contribs[x].High := Mx - Contribs[x].Min;
-    Assert(Contribs[x].High >= 0); // hasn't failed lately:)
+    assert(Contribs[x].High >= 0); // hasn't failed lately:)
     // High=Number of contributing pixels minus 1
     SetLength(Contribs[x].Weights, Contribs[x].High + 1);
     with Contribs[x] do
@@ -435,9 +447,9 @@ var
 begin
   Source.PixelFormat := pf32bit;
   Target.PixelFormat := pf32bit; // for safety
-  NewWidth := Target.Width;
+  NewWidth := Target.width;
   NewHeight := Target.height;
-  OldWidth := Source.Width;
+  OldWidth := Source.width;
   OldHeight := Source.height;
 
   Tbps := ((NewWidth * 32 + 31) and not 31) div 8;
@@ -455,10 +467,10 @@ begin
 
   SetLength(rx, ymax - ymin + 1);
   SetLength(gx, ymax - ymin + 1);
-  SetLength(bx, ymax - ymin + 1); //cache arrays
+  SetLength(bx, ymax - ymin + 1); // cache arrays
 
-  rStart := Source.Scanline[ymin];
-  rTStart := Target.Scanline[0];
+  rStart := Source.ScanLine[ymin];
+  rTStart := Target.ScanLine[0];
 
   // Compute color at each target pixel (x,y)
 
@@ -504,7 +516,7 @@ begin
       inc(runr);
       inc(rung);
       inc(runb);
-      Dec(rs, Sbps);
+      dec(rs, Sbps);
     end;
     // Average in y-direction:
     // For each target line y sum up weighted colors
@@ -548,7 +560,7 @@ begin
       pT.rgbBlue := Min(tb, 255);
       pT.rgbGreen := Min(tg, 255);
       pT.rgbRed := Min(tr, 255);
-      Dec(rT, Tbps);
+      dec(rT, Tbps);
     end; // for y
 
   end; // for x
@@ -593,10 +605,10 @@ var
   ts, td: PRGBQuad;
 begin
 
-  iwd := Dest.Width;
+  iwd := Dest.width;
   ihd := Dest.height;
-  Assert((iwd > 1) and (ihd > 1), 'Dest Bitmap too small');
-  iws := Src.Width;
+  assert((iwd > 1) and (ihd > 1), 'Dest Bitmap too small');
+  iws := Src.width;
   ihs := Src.height;
   Src.PixelFormat := pf32bit;
   Dest.PixelFormat := pf32bit;
@@ -608,13 +620,13 @@ begin
   MakeSteps(iwd, iws, rs.Left, rs.Right - rs.Left, xsteps, 1);
   MakeSteps(ihd, ihs, rs.Top, rs.Bottom - rs.Top, ysteps, bs);
 
-  Rows := Src.Scanline[0];
-  rowd := Dest.Scanline[0];
+  Rows := Src.ScanLine[0];
+  rowd := Dest.ScanLine[0];
   Stepsy := @ysteps[0];
 
   for y := 0 to ihd - 1 do
   begin
-    Dec(Rows, Stepsy^); // bottom-up
+    dec(Rows, Stepsy^); // bottom-up
     ts := PRGBQuad(Rows);
     td := PRGBQuad(rowd);
     Stepsx := @xsteps[0];
@@ -625,7 +637,7 @@ begin
       inc(td);
       inc(Stepsx)
     end;
-    Dec(rowd, bd);
+    dec(rowd, bd);
     inc(Stepsy);
   end;
 end;

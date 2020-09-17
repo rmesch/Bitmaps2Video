@@ -127,7 +127,7 @@ type
     property VideoHeight: integer read fHeight;
 
     property FrameRate: integer read fRate;
-    ///<summary> Frame count of the last video added, use for grabbing thumbnails or timing </summary>
+    /// <summary> Frame count of the last video added, use for grabbing thumbnails or timing </summary>
     property LastVideoFrameCount: integer read fVideoFrameCount;
 
     /// <summary> Event which fires every second of video time while writing. Use it to update a progressbar etc.. </summary>
@@ -136,6 +136,7 @@ type
 
     // Audio must be added by muxing, see below
     // Threads: Seems to be threadsafe when an instance is not used across threads
+    // Needs to be tested further
     // Canvas procedures must be protected by Lock/Unlock.
   end;
 
@@ -216,12 +217,12 @@ begin
       av_packet_rescale_ts(@pkt, fInputVideoTimebase, c.time_base);
       pkt.pts := fVideoFrameStart + pkt.pts;
       pkt.dts := fVideoFrameStart + pkt.dts;
-      fFrameCount:=pkt.dts;
+      fFrameCount := pkt.dts;
     end
     else
     begin
-      pkt.pts:=fFrameCount;
-      pkt.dts:=fFrameCount;
+      pkt.pts := fFrameCount;
+      pkt.dts := fFrameCount;
     end;
 
     av_packet_rescale_ts(@pkt, c.time_base, stream.time_base);
@@ -264,7 +265,8 @@ var
   bw, bh: integer;
 begin
   evf := EnvelopeFunction[SpeedEnvelope];
-  bw:=bm.Width; bh:=bm.Height;
+  bw := bm.Width;
+  bh := bm.Height;
   am := TBitmap.Create; // Antialias bitmap
   try
     am.PixelFormat := pf32bit;
@@ -484,6 +486,8 @@ var
 const
   Epsilon = 0.1;
 begin
+  assert(UpperCase(fFilename) <> UpperCase(VideoInput),
+    'Output file name must be different from input file name');
   fmt_ctx := nil;
   video_dec_ctx := nil;
   frame := nil;
@@ -555,9 +559,12 @@ begin
         Continue;
       end;
       (* decode video frame *)
+      // !avcodec_decode_video2 is deprecated, but I couldn't get
+      // the replacement avcode_send_packet and avcodec_receive_frame to work
       got_frame := 0;
       ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
       assert(ret >= 0);
+
       // This is needed to give the frames the right decoding- and presentation- timestamps
       // see encode for FromVideo = true
       VideoPts := pkt.pts;
@@ -719,7 +726,7 @@ var
   in_filename, out_filename: PAnsiChar;
   in_stream: PAVStream;
   in_codecpar: PAVCodecParameters;
-  pkt,lastVideoPkt: TAvPacket;
+  pkt, lastVideoPkt: TAvPacket;
   p: PPAVStream;
   numstreams, sn: Cardinal;
 begin
@@ -818,10 +825,10 @@ begin
     // should not be necessary, the time bases are identical
     // rather keep it, avio_open can change the time base
     av_packet_rescale_ts(@pkt, in_stream.time_base, stream.time_base);
-    lastVideoPkt:=pkt;
+    lastVideoPkt := pkt;
     pkt.pos := -1;
     av_interleaved_write_frame(oc, @pkt);
-    //inc(fFrameCount);
+    // inc(fFrameCount);
     av_packet_unref(@pkt);
   end;
   // Create encoding context and fill with codec info using c=global encoding context
@@ -845,8 +852,8 @@ begin
   c.Height := fHeight;
   c.pix_fmt := in_stream.codec.pix_fmt;
   c.flags := in_stream.codec.flags;
-  av_packet_rescale_ts(@LastVideoPkt, stream.time_base, c.time_base);
-  fFrameCount:=LastVideoPkt.dts;
+  av_packet_rescale_ts(@lastVideoPkt, stream.time_base, c.time_base);
+  fFrameCount := lastVideoPkt.dts;
   avformat_close_input(@ifmt_ctx);
 
   // if we set the global_header flag here, writing fails.

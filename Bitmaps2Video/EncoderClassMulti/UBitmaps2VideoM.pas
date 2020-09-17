@@ -10,6 +10,9 @@
   KIND, either express or implied.  See the License for the
   specific language governing permissions and limitations
   under the License.
+  Contributors:
+  Renate Schaaf (original code)
+  Markus Humm (made it compile and run under Android)
 *****************************************************************************}
 unit UBitmaps2VideoM;
 

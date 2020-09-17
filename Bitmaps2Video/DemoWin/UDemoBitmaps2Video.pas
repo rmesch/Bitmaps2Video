@@ -96,7 +96,8 @@ implementation
 
 uses mmSystem, System.Types, math, UTools, Winapi.ShlObj, Winapi.ActiveX;
 
-const Aspects: array[0..2] of double = (16/9, 4/3, 3/2);
+const
+  Aspects: array [0 .. 2] of double = (16 / 9, 4 / 3, 3 / 2);
 
 function PIDLToPath(IdList: PItemIDList): string;
 begin
@@ -154,7 +155,7 @@ begin
     Vcl.Dialogs.ShowMessage('Load a picture first');
     exit;
   end;
-  VideoAspect:=Aspects[RadioGroup1.ItemIndex];
+  VideoAspect := Aspects[RadioGroup1.ItemIndex];
   t := TimeGetTime;
   bm := TBitmap.Create;
   try
@@ -192,15 +193,15 @@ begin
     try
       bme.OnProgress := UpdateVideo;
       ProgressBar1.Position := 0;
-      // 30 seconds of movie
-      bme.AddStillImage(bm, 2000);
+      // 20 seconds of movie
+      bme.AddStillImage(bm, 1000);
 
-      bme.ZoomPan(bm, ZoomSource, ZoomTarget, 9000, ZoomOption, zeFastSlow);
+      bme.ZoomPan(bm, ZoomSource, ZoomTarget, 6000, ZoomOption, zeFastSlow);
       bme.Freeze(1000);
-      bme.ZoomPan(bm, ZoomTarget, ZoomTarget2, 8000, ZoomOption, zeSlowSlow);
+      bme.ZoomPan(bm, ZoomTarget, ZoomTarget2, 5000, ZoomOption, zeSlowSlow);
       bme.Freeze(1000);
-      bme.ZoomPan(bm, ZoomTarget2, ZoomSource, 7000, ZoomOption, zeSlowFast);
-      bme.Freeze(2000);
+      bme.ZoomPan(bm, ZoomTarget2, ZoomSource, 5000, ZoomOption, zeSlowFast);
+      bme.Freeze(1000);
 
       bme.CloseFile; // movie should be done
       t := TimeGetTime - t;
@@ -286,24 +287,29 @@ begin
   DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r, dt_Center);
 end;
 
+procedure BlackBitmap(const bm: TBitmap; w, h: integer);
+begin
+  bm.PixelFormat := pf32bit;
+  bm.SetSize(w, h);
+  BitBlt(bm.Canvas.Handle, 0, 0, w, h, 0, 0, 0, BLACKNESS);
+end;
+
 procedure TForm1.Button6Click(Sender: TObject);
 var
   bme: TBitmapEncoder;
   bm: TBitmap;
-  
+
 begin
   if not OVD.Execute then
     exit;
-  Label15.Caption:='Working';
+  Label15.Caption := 'Working';
   Label15.Repaint;
   bme := TBitmapEncoder.CreateFromVideo(OVD.FileName, Edit1.Text, vsBiCubic);
   try
     bm := TBitmap.Create;
     try
-      bm.Width := bme.VideoWidth;
-      bm.Height := bme.VideoHeight;
-      BitBlt(bm.Canvas.Handle, 0, 0, bm.Width, bm.Height, 0, 0, 0, BLACKNESS);
-      TextOnBitmap(bm,'End Slide Added');
+      BlackBitmap(bm, bme.VideoWidth, bme.VideoHeight);
+      TextOnBitmap(bm, 'End Slide Added');
       bme.AddStillImage(bm, 4000);
     finally
       bm.Free;
@@ -312,9 +318,8 @@ begin
   finally
     bme.Free;
   end;
-  Label15.Caption:='Done';
+  Label15.Caption := 'Done';
 end;
-
 
 procedure TForm1.Button7Click(Sender: TObject);
 var
@@ -324,30 +329,40 @@ var
 begin
   if not OVD.Execute then
     exit;
-  VideoAspect:=Aspects[Radiogroup1.ItemIndex];
+  VideoAspect := Aspects[RadioGroup1.ItemIndex];
   bm := TBitmap.Create;
   try
-    //load the 1st frame from the video
-    GrabFrame(bm, OVD.FileName, 1);
     h := StrToInt(HC.Text);
     w := round(VideoAspect * h);
-    //video sizes must be even
+    // video sizes must be even
     if odd(w) then
       dec(w);
-    Label12.Caption:='Working';
+    // load the 1st frame from the video
+    try
+      GrabFrame(bm, OVD.FileName, 1);
+    except
+      // We catch the exception, since GrabFrame does not
+      // yet work reliably with foreign video content
+      BlackBitmap(bm, w, h);
+    end;
+    Label12.Caption := 'Working';
     Label12.Repaint;
     bme := TBitmapEncoder.Create(Edit1.Text + FormatCombo.Text, w, h,
       StrToInt(RateCombo.Text), SpinEdit1.Value,
       TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic);
     try
-      TextOnBitmap(bm,'Intro Screen');
+      TextOnBitmap(bm, 'Intro Screen');
       bme.AddStillImage(bm, 5000);
       bme.AddVideo(OVD.FileName);
-      //bme.LastVideoFrameCount always contains the frame count of the last
-      //added video.
-      GrabFrame(bm, OVD.FileName,bme.LastVideoFrameCount-2);
-      TextOnBitmap(bm,'The End');
-      bme.AddStillImage(bm,5000);
+      // bme.LastVideoFrameCount always contains the frame count of the last
+      // added video.
+      try
+        GrabFrame(bm, OVD.FileName, bme.LastVideoFrameCount - 2);
+      except
+        BlackBitmap(bm, w, h);
+      end;
+      TextOnBitmap(bm, 'The End');
+      bme.AddStillImage(bm, 5000);
       bme.CloseFile;
     finally
       bme.Free;
@@ -355,7 +370,7 @@ begin
   finally
     bm.Free;
   end;
-  Label12.Caption:='Done';
+  Label12.Caption := 'Done';
 end;
 
 procedure TForm1.CodecComboChange(Sender: TObject);
@@ -400,7 +415,7 @@ begin
   if FileExists('GoodTestPicture.png') then
     Image1.Picture.LoadFromFile('GoodTestPicture.png');
   UpdateSizeinMB;
-  VideoAspect:=16/9;
+  VideoAspect := 16 / 9;
   Randomize;
 end;
 
