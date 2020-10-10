@@ -1,0 +1,9 @@
+
+10-11-2020
+Fixed possible source of floating point exception under Win64
+
+
+10-10-2020
+Fix: Restored missing xml-files for Android deployment.
+Update Win: AddVideo and GrabFrame now properly convert non-square pixels (PAL, NTSC) to square pixels.
+Update Win: AddVideo now de-interlaces interlaced video clips before writing them to the video stream.

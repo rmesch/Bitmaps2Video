@@ -527,9 +527,11 @@ const
     If FilterInitialized then
       exit;
     snprintf(@args[0], sizeof(args),
-      'buffer=video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d[in];[in]yadif[out];[out]buffersink',
-      video_dec_ctx.Width, video_dec_ctx.Height, video_dec_ctx.pix_fmt,
-      fInputVideoTimebase.num, fInputVideoTimebase.den, sar.num, sar.den);
+      'buffer=video_size=%dx%d:pix_fmt=%d:time_base=1/1:pixel_aspect=0/1[in];[in]yadif[out];[out]buffersink',
+      video_dec_ctx.Width, video_dec_ctx.Height, video_dec_ctx.pix_fmt                                                                      {
+                                                                        ,
+                                                                              fInputVideoTimebase.num, fInputVideoTimebase.den, sar.num, sar.den
+                                                                      });
     filter_graph := avfilter_graph_alloc();
     inputs := nil;
     outputs := nil;
