@@ -1,5 +1,9 @@
 # Bitmaps2Video
 A Delphi-class to support encoding of a series of bitmaps to a video file. It requires the ffmpeg-library and is intended as an easy to use interface to this library. The class has been developed under Delphi 10.3.3, but should work with later versions and some previous versions, too. Please report issues.
+We concentrate on writing video streams, there is only rudimentary support for adding audio streams.
+The ffmpeg-library-version and header-file contained here orginate from
+https://github.com/PassByYou888/FFMPEG-Header   Thanks!
+
 
 There are 2 versions of the encoder class:
 
@@ -7,7 +11,7 @@ There are 2 versions of the encoder class:
       relatively stable with H264, Mpeg-4, Mjpeg, Mpeg1/2 encoders and .avi, .mp4 containers.
  
     TBitmapEncoderM for cross platform with less features and less tested.
-      Demo currently working with Win32, Win64, Android, Android64, thanks to TurboMagic
+      Demo currently working with Win32, Win64, Android, Android64 (hopefully again after blunder from Renate), thanks to TurboMagic
 
 The cross platform demo requires at least Delphi 10.3.3 as it contains the necessary support for requesting permission to write to external storage at runtime.
 The video created on Android is stored in public downloads folder and the Androi demo compiles for both 32 and 64 bit.

@@ -19,12 +19,18 @@ interface
 
 uses WinApi.Windows, System.Types, VCL.Graphics, FFMpeg;
 
-// All bitmaps should be pf32bit
+type
+  TVideoProps = record
+    Width, Height, TrueHeight: integer;
+    FrameRate: integer;
+  end;
 
-// Follows: "bicubic" resampler based on ideas by Anders Melander, Mike Lischke
-// and Eric Grange. It supports float values for filter radii and float-valued
-// zoom rectangles. Source, Target should be pf32bit. Target must be set to the
-// correct size.
+  // All bitmaps should be pf32bit
+
+  // Follows: "bicubic" resampler based on ideas by Anders Melander, Mike Lischke
+  // and Eric Grange. It supports float values for filter radii and float-valued
+  // zoom rectangles. Source, Target should be pf32bit. Target must be set to the
+  // correct size.
 procedure ZoomResampleTripleOnly(const Source, Target: TBitmap;
   SourceRect: TRectF; Radius: single);
 
@@ -55,6 +61,10 @@ inline
 /// <summary> Convert frame number FrameNumber of a video file into a bitmap </summary>
 procedure GrabFrame(const bm: TBitmap; const Videofile: string;
   FrameNumber: integer);
+/// <summary> Get video time in ms of the Videofile </summary>
+function GetVideoTime(const Videofile: string): int64;
+/// <summary> Get video width, height and frame rate. TrueHeight is the height when not square pixels sizes are made square (sar) </summary>
+function GetVideoProps(const Videofile: string): TVideoProps;
 
 procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;
   fmt_ctx: PAVFormatContext; type_: TAVMediaType);
@@ -67,6 +77,12 @@ function Linear(t: double): double; inline;
 function Experiment(t: double): double; inline;
 
 function GetTempfolder: string;
+
+/// <summary> Utility useful to create a correctly formatted string to create a filter </summary>
+function snprintf(buf: PAnsiChar; size: Cardinal; const fmt: PAnsiChar)
+  : integer;
+cdecl varargs;
+external 'msvcrt' name '_snprintf';
 
 type
   TEnvelopeFunction = function(t: double): double;
@@ -120,12 +136,72 @@ begin
 
 end;
 
+function GetVideoTime(const Videofile: string): int64;
+var
+  ret: integer;
+  fmt_ctx: PAVFormatContext;
+begin
+  fmt_ctx := nil;
+  (* open input file, and allocate format context *)
+  ret := avformat_open_input(@fmt_ctx, PAnsiChar(AnsiString(Videofile)),
+    nil, nil);
+  try
+    assert(ret >= 0);
+    ret := avformat_find_stream_info(fmt_ctx, nil);
+    assert(ret >= 0);
+    result := round(1000 * fmt_ctx.duration / AV_TIME_BASE);
+  finally
+    avformat_close_input(@fmt_ctx);
+  end;
+end;
+
+function GetVideoProps(const Videofile: string): TVideoProps;
+var
+  ret: integer;
+  fmt_ctx: PAVFormatContext;
+  p: PPAVStream;
+  sn: Cardinal;
+  sar: TAVRational;
+begin
+  fmt_ctx := nil;
+  (* open input file, and allocate format context *)
+  ret := avformat_open_input(@fmt_ctx, PAnsiChar(AnsiString(Videofile)),
+    nil, nil);
+  try
+    assert(ret >= 0);
+    ret := avformat_find_stream_info(fmt_ctx, nil);
+    assert(ret >= 0);
+    p := fmt_ctx.streams;
+    sn := 0;
+    while (p^.codec.codec_type <> AVMEDIA_TYPE_VIDEO) and
+      (sn < fmt_ctx.nb_streams) do
+    begin
+      inc(p);
+      inc(sn);
+    end;
+    assert(sn < fmt_ctx.nb_streams, 'No video stream found in ' + Videofile);
+    sar := p^.codecpar.sample_aspect_ratio;
+    result.Width := p^.codecpar.Width;
+    result.Height := p^.codecpar.Height;
+    if (sar.num > 0) and (sar.den > 0) then
+      result.TrueHeight := round(p^.codecpar.Height * sar.den / sar.num)
+    else
+      result.TrueHeight := p^.codecpar.Height;
+    if p^.avg_frame_rate.den > 0 then
+      result.FrameRate := round(p^.avg_frame_rate.num / p^.avg_frame_rate.den)
+    else
+      result.FrameRate := p^.r_frame_rate.num;
+  finally
+    avformat_close_input(@fmt_ctx);
+  end;
+end;
+
 procedure GrabFrame(const bm: TBitmap; const Videofile: string;
   FrameNumber: integer);
 var
   fmt_ctx: PAVFormatContext;
   video_dec_ctx: PAVCodecContext;
-  width, height: integer;
+  Width, Height: integer;
   pix_fmt: TAVPixelFormat;
   // video_stream: PAVStream;
   video_stream_idx: integer;
@@ -138,20 +214,22 @@ var
   video_dst_linesize: array [0 .. 3] of integer;
   convertCtx: PSwsContext;
   rgbPic: PAVFrame;
-  x, y: integer;
+  X, Y: integer;
   ps: PRGBQuad;
   row: PByte;
   px, py: PByte;
   jump: integer;
   bps: integer;
+  sar: TAVRational;
+  nh: integer;
 begin
   fmt_ctx := nil;
   video_dec_ctx := nil;
   // video_stream := nil;
   frame := nil;
   rgbPic := nil;
-  for x := 0 to 3 do
-    video_dst_data[x] := nil;
+  for X := 0 to 3 do
+    video_dst_data[X] := nil;
   (* open input file, and allocate format context *)
   ret := avformat_open_input(@fmt_ctx, PAnsiChar(AnsiString(Videofile)),
     nil, nil);
@@ -165,14 +243,20 @@ begin
     AVMEDIA_TYPE_VIDEO);
 
   (* allocate image where the decoded image will be put *)
-  width := video_dec_ctx.width;
-  height := video_dec_ctx.height;
+  Width := video_dec_ctx.Width;
+  Height := video_dec_ctx.Height;
   pix_fmt := video_dec_ctx.pix_fmt;
-  ret := av_image_alloc(@video_dst_data[0], @video_dst_linesize[0], width,
-    height, pix_fmt, 1);
+  // get the pixel aspect ratio, so we rescale the bitmap to the right size
+  sar := video_dec_ctx.sample_aspect_ratio;
+  if (sar.num > 0) and (sar.den > 0) then
+    nh := round(Height * sar.den / sar.num)
+  else
+    nh := Height;
+  ret := av_image_alloc(@video_dst_data[0], @video_dst_linesize[0], Width,
+    Height, pix_fmt, 1);
   assert(ret >= 0);
   // Conversion Context to BGR
-  convertCtx := sws_getContext(width, height, pix_fmt, width, height,
+  convertCtx := sws_getContext(Width, Height, pix_fmt, Width, nh,
     AV_PIX_FMT_BGR24, SWS_FAST_BILINEAR, nil, nil, nil);
   // Allocate storage for the rgb-frame
   rgbPic := av_frame_alloc();
@@ -182,8 +266,8 @@ begin
   try
 
     rgbPic.Format := Ord(AV_PIX_FMT_BGR24);
-    rgbPic.width := width;
-    rgbPic.height := height;
+    rgbPic.Width := Width;
+    rgbPic.Height := nh;
     av_frame_get_buffer(rgbPic, 0);
 
     (* initialize packet, set data to NULL, let the demuxer fill it *)
@@ -192,7 +276,6 @@ begin
     pkt.size := 0;
     video_frame_count := 0;
     (* read frame FrameNumber from the file *)
-    ret := 0;
     while (video_frame_count < FrameNumber - 1) do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
@@ -233,22 +316,22 @@ begin
     // Convert the yuv-frame to rgb-frame
     ret := av_frame_make_writable(rgbPic);
     assert(ret >= 0);
-    ret := sws_scale(convertCtx, @frame.data, @frame.linesize, 0, height,
+    ret := sws_scale(convertCtx, @frame.data, @frame.linesize, 0, Height,
       @rgbPic.data, @rgbPic.linesize);
     assert(ret >= 0);
-    // Store the frame in a bmp
 
+    // Store the frame in a bmp
     bm.PixelFormat := pf32bit;
-    bm.SetSize(width, height);
+    bm.SetSize(Width, nh);
     row := bm.ScanLine[0];
-    bps := ((width * 32 + 31) and not 31) div 8;
+    bps := ((Width * 32 + 31) and not 31) div 8;
     py := @PByte(rgbPic.data[0])[0];
     jump := rgbPic.linesize[0];
-    for y := 0 to height - 1 do
+    for Y := 0 to nh - 1 do
     begin
       ps := PRGBQuad(row);
       px := py;
-      for x := 0 to width - 1 do
+      for X := 0 to Width - 1 do
       begin
         PRGBTriple(ps)^ := PRGBTriple(px)^;
         inc(px, 3);
@@ -271,52 +354,52 @@ function GetTempfolder: string;
 var
   l: integer;
 begin
-  SetLength(Result, MAX_PATH + 1);
-  l := GetTempPath(MAX_PATH, PChar(Result));
-  SetLength(Result, l);
-  if Result[Length(Result)] = '\' then
-    Result := copy(Result, 1, Length(Result) - 1);
+  SetLength(result, MAX_PATH + 1);
+  l := GetTempPath(MAX_PATH, PChar(result));
+  SetLength(result, l);
+  if result[Length(result)] = '\' then
+    result := copy(result, 1, Length(result) - 1);
 end;
 
 function Experiment(t: double): double; inline;
 begin
-  Result := 0.5 * sin(2 * Pi * t) + t;
+  result := 0.5 * sin(2 * Pi * t) + t;
 end;
 
 function SlowSlow(t: double): double; inline;
 begin
-  Result := 3 * t * t - 2 * t * t * t;
+  result := 3 * t * t - 2 * t * t * t;
 end;
 
 function SlowFast(t: double): double; inline;
 begin
-  Result := t * t;
+  result := t * t;
 end;
 
 function FastSlow(t: double): double; inline;
 begin
-  Result := 2 * t - t * t;
+  result := 2 * t - t * t;
 end;
 
 function Linear(t: double): double; inline;
 begin
-  Result := t;
+  result := t;
 end;
 
 function Interpolate(SourceR, TargetR: TRectF; t: double): TRectF;
 begin
-  Result.Left := SourceR.Left + t * (TargetR.Left - SourceR.Left);
-  Result.Top := SourceR.Top + t * (TargetR.Top - SourceR.Top);
-  Result.Right := SourceR.Right + t * (TargetR.Right - SourceR.Right);
-  Result.Bottom := SourceR.Bottom + t * (TargetR.Bottom - SourceR.Bottom);
+  result.Left := SourceR.Left + t * (TargetR.Left - SourceR.Left);
+  result.Top := SourceR.Top + t * (TargetR.Top - SourceR.Top);
+  result.Right := SourceR.Right + t * (TargetR.Right - SourceR.Right);
+  result.Bottom := SourceR.Bottom + t * (TargetR.Bottom - SourceR.Bottom);
 end;
 
 function ScaleRect(SourceR: TRectF; fact: double): TRectF;
 begin
-  Result.Left := fact * SourceR.Left;
-  Result.Top := fact * SourceR.Top;
-  Result.Right := fact * SourceR.Right;
-  Result.Bottom := fact * SourceR.Bottom;
+  result.Left := fact * SourceR.Left;
+  result.Top := fact * SourceR.Top;
+  result.Right := fact * SourceR.Right;
+  result.Bottom := fact * SourceR.Bottom;
 end;
 
 procedure CenterRect(var aRect: TRectF; BigR: TRectF);
@@ -348,17 +431,17 @@ const
   dd = -alpha * beta2;
   // constants computed with maple for polynomial fit
 
-function AntiMyFilter(x: double): double; inline;
+function AntiMyFilter(X: double): double; inline;
 // Antiderivative of a filter function similar to bicubic, but I like it better
 begin
-  if x < -1 then
-    Result := -0.5
-  else if x < 1 then
-    Result := aa * x * x * x * x * x * x * x + bb * x * x * x * x * x + cc * x *
-      x * x + dd * x
+  if X < -1 then
+    result := -0.5
+  else if X < 1 then
+    result := aa * X * X * X * X * X * X * X + bb * X * X * X * X * X + cc * X *
+      X * X + dd * X
 
   else
-    Result := 0.5;
+    result := 0.5;
 end;
 
 procedure MakeContributors(r: single; SourceSize, TargetSize: integer;
@@ -366,7 +449,7 @@ procedure MakeContributors(r: single; SourceSize, TargetSize: integer;
 // r: Filterradius
 var
   xCenter, scale, rr: double;
-  x, j: integer;
+  X, j: integer;
   x1, x2, delta: double;
   TrueMin, TrueMax, Mx: integer;
 begin
@@ -382,20 +465,20 @@ begin
     rr := r;
   delta := 1 / rr;
 
-  for x := 0 to TargetSize - 1 do
+  for X := 0 to TargetSize - 1 do
   begin
-    xCenter := (x + 0.5) * scale;
+    xCenter := (X + 0.5) * scale;
     TrueMin := Ceil(xCenter - rr + SourceStart - 1);
     TrueMax := Floor(xCenter + rr + SourceStart);
-    Contribs[x].Min := Min(Max(TrueMin, 0), SourceSize - 1);
+    Contribs[X].Min := Min(Max(TrueMin, 0), SourceSize - 1);
     // make sure not to read in negative pixel locations
     Mx := Max(Min(TrueMax, SourceSize - 1), 0);
     // make sure not to read past w1-1 in the source
-    Contribs[x].High := Mx - Contribs[x].Min;
-    assert(Contribs[x].High >= 0); // hasn't failed lately:)
+    Contribs[X].High := Mx - Contribs[X].Min;
+    assert(Contribs[X].High >= 0); // hasn't failed lately:)
     // High=Number of contributing pixels minus 1
-    SetLength(Contribs[x].Weights, Contribs[x].High + 1);
-    with Contribs[x] do
+    SetLength(Contribs[X].Weights, Contribs[X].High + 1);
+    with Contribs[X] do
     begin
       x1 := delta * (Min - SourceStart - xCenter);
       for j := 0 to High do
@@ -440,17 +523,17 @@ var
   rs, rT, rStart, rTStart: PByte; // Row start in Source, Target
   weightx, weighty, weightxStart: PInteger;
   rx, gx, bx: TIntArray;
-  x, y, xs, ys, ymin, ymax: integer;
+  X, Y, xs, ys, ymin, ymax: integer;
   highx, highy, minx, miny: integer;
   runr, rung, runb: PInteger;
   runrstart, rungstart, runbstart: PInteger;
 begin
   Source.PixelFormat := pf32bit;
   Target.PixelFormat := pf32bit; // for safety
-  NewWidth := Target.width;
-  NewHeight := Target.height;
-  OldWidth := Source.width;
-  OldHeight := Source.height;
+  NewWidth := Target.Width;
+  NewHeight := Target.Height;
+  OldWidth := Source.Width;
+  OldHeight := Source.Height;
 
   Tbps := ((NewWidth * 32 + 31) and not 31) div 8;
   // BytesPerScanline Target
@@ -478,16 +561,16 @@ begin
   rungstart := @gx[0];
   runbstart := @bx[0];
 
-  for x := 0 to NewWidth - 1 do
+  for X := 0 to NewWidth - 1 do
   begin
     rs := rStart;
-    highx := ContribsX[x].High;
-    minx := ContribsX[x].Min;
-    weightxStart := @ContribsX[x].Weights[0];
+    highx := ContribsX[X].High;
+    minx := ContribsX[X].Min;
+    weightxStart := @ContribsX[X].Weights[0];
     runr := runrstart;
     rung := rungstart;
     runb := runbstart;
-    for y := ymin to ymax do
+    for Y := ymin to ymax do
     begin
 
       // For each source line y
@@ -524,13 +607,13 @@ begin
     // Store result in tr,tg,tb ("total red" etc.)
     // round and assign to TargetPixel[x,y]
     rT := rTStart;
-    for y := 0 to NewHeight - 1 do
+    for Y := 0 to NewHeight - 1 do
     begin
       pT := PRGBQuad(rT);
-      inc(pT, x);
-      highy := ContribsY[y].High;
-      miny := ContribsY[y].Min - ymin;
-      weighty := @ContribsY[y].Weights[0];
+      inc(pT, X);
+      highy := ContribsY[Y].High;
+      miny := ContribsY[Y].Min - ymin;
+      weighty := @ContribsY[Y].Weights[0];
       runr := runrstart;
       rung := rungstart;
       runb := runbstart;
@@ -598,18 +681,18 @@ procedure ZoomDeleteScansTripleOnly(const Src, Dest: TBitmap; rs: TRectF);
 
 var
   iwd, ihd, iws, ihs, bs, bd: integer;
-  x, y: integer;
+  X, Y: integer;
   xsteps, ysteps: TIntArray;
   Rows, rowd: PByte;
   Stepsx, Stepsy: PInteger;
   ts, td: PRGBQuad;
 begin
 
-  iwd := Dest.width;
-  ihd := Dest.height;
+  iwd := Dest.Width;
+  ihd := Dest.Height;
   assert((iwd > 1) and (ihd > 1), 'Dest Bitmap too small');
-  iws := Src.width;
-  ihs := Src.height;
+  iws := Src.Width;
+  ihs := Src.Height;
   Src.PixelFormat := pf32bit;
   Dest.PixelFormat := pf32bit;
 
@@ -624,13 +707,13 @@ begin
   rowd := Dest.ScanLine[0];
   Stepsy := @ysteps[0];
 
-  for y := 0 to ihd - 1 do
+  for Y := 0 to ihd - 1 do
   begin
     dec(Rows, Stepsy^); // bottom-up
     ts := PRGBQuad(Rows);
     td := PRGBQuad(rowd);
     Stepsx := @xsteps[0];
-    for x := 0 to iwd - 1 do
+    for X := 0 to iwd - 1 do
     begin
       inc(ts, Stepsx^);
       PRGBTriple(td)^ := PRGBTriple(ts)^;

@@ -1,2 +1,15 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<BorlandProject/>
+<BorlandProject>
+	<ProjectSortOrder AutoSort="0" SortType="0">
+    <File Path="..\..\Bitmaps2Video"/>
+    <File Path="..\EncoderClassWin"/>
+    <File Path="..\EncoderClassWin\UBitmaps2Video.pas"/>
+    <File Path="..\EncoderClassWin\UFormats.pas"/>
+    <File Path="..\EncoderClassWin\UTools.pas"/>
+    <File Path="..\FFMPeg"/>
+    <File Path="..\FFMPeg\Source"/>
+    <File Path="..\FFMPeg\Source\FFMPEG.pas"/>
+    <File Path="UDemoBitmaps2Video.pas"/>
+    <File Path="UDemoBitmaps2Video.dfm"/>
+  </ProjectSortOrder>
+</BorlandProject>

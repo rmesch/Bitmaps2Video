@@ -55,6 +55,7 @@ type
     Memo1: TMemo;
     Label15: TLabel;
     Label16: TLabel;
+    ProgressBar2: TProgressBar;
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -75,6 +76,7 @@ type
   public
     { Public declarations }
     VideoAspect: double;
+    TheProgressbar: TProgressBar;
     procedure UpdateVideo(Videotime: int64);
   end;
 
@@ -191,8 +193,10 @@ begin
     // vsBiCubic: if it needs to scale it scales nicely
 
     try
-      bme.OnProgress := UpdateVideo;
+      TheProgressbar := ProgressBar1;
+      ProgressBar1.Max := 20000;
       ProgressBar1.Position := 0;
+      bme.OnProgress := UpdateVideo;
       // 20 seconds of movie
       bme.AddStillImage(bm, 1000);
 
@@ -326,9 +330,11 @@ var
   bm: TBitmap;
   bme: TBitmapEncoder;
   w, h: integer;
+  Videofile: string;
 begin
   if not OVD.Execute then
     exit;
+  Videofile := OVD.FileName;
   VideoAspect := Aspects[RadioGroup1.ItemIndex];
   bm := TBitmap.Create;
   try
@@ -339,7 +345,7 @@ begin
       dec(w);
     // load the 1st frame from the video
     try
-      GrabFrame(bm, OVD.FileName, 1);
+      GrabFrame(bm, Videofile, 1);
     except
       // We catch the exception, since GrabFrame does not
       // yet work reliably with foreign video content
@@ -347,10 +353,14 @@ begin
     end;
     Label12.Caption := 'Working';
     Label12.Repaint;
+    ProgressBar2.Max := GetVideoTime(Videofile);
+    ProgressBar2.Position := 0;
+    TheProgressbar := ProgressBar2;
     bme := TBitmapEncoder.Create(Edit1.Text + FormatCombo.Text, w, h,
       StrToInt(RateCombo.Text), SpinEdit1.Value,
       TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic);
     try
+      bme.OnProgress := UpdateVideo;
       TextOnBitmap(bm, 'Intro Screen');
       bme.AddStillImage(bm, 5000);
       bme.AddVideo(OVD.FileName);
@@ -436,7 +446,7 @@ end;
 
 procedure TForm1.UpdateVideo(Videotime: int64);
 begin
-  ProgressBar1.Position := Videotime;
+  TheProgressbar.Position := Videotime;
 end;
 
 { TRawSetup }

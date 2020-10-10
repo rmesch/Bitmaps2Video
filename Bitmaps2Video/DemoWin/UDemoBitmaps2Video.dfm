@@ -66,7 +66,7 @@ object Form1: TForm1
   end
   object Button2: TButton
     Left = 374
-    Top = 20
+    Top = 21
     Width = 27
     Height = 25
     Caption = '...'
@@ -96,7 +96,7 @@ object Form1: TForm1
     OnChange = HCChange
     Items.Strings = (
       '360'
-      '480'
+      '540'
       '600'
       '720'
       '1080')
@@ -258,6 +258,7 @@ object Form1: TForm1
     object TabSheet2: TTabSheet
       Caption = 'Inserting an existing video'
       ImageIndex = 1
+      ExplicitLeft = 6
       object Label11: TLabel
         Left = 0
         Top = 98
@@ -287,7 +288,7 @@ object Form1: TForm1
       end
       object Label12: TLabel
         Left = 194
-        Top = 46
+        Top = 48
         Width = 15
         Height = 13
         Caption = '     '
@@ -300,6 +301,13 @@ object Form1: TForm1
         Caption = 'Load and insert video'
         TabOrder = 0
         OnClick = Button7Click
+      end
+      object ProgressBar2: TProgressBar
+        Left = 278
+        Top = 46
+        Width = 163
+        Height = 17
+        TabOrder = 1
       end
     end
     object TabSheet3: TTabSheet
@@ -429,7 +437,7 @@ object Form1: TForm1
       end
       object Button4: TButton
         Left = 14
-        Top = 23
+        Top = 25
         Width = 175
         Height = 25
         Caption = 'Add audio to the output file'
@@ -463,9 +471,9 @@ object Form1: TForm1
     Top = 162
   end
   object OD: TOpenDialog
-    Filter = 'Audio files (*.wav, *.mp3, *.aac)|*.wav;*.mp3;.aac'
-    Left = 410
-    Top = 162
+    Filter = 'Audio files (*.wav, *.mp3, *.aac)|*.wav;*.mp3;.aac|Any file|*.*'
+    Left = 412
+    Top = 164
   end
   object OVD: TOpenDialog
     Filter = 

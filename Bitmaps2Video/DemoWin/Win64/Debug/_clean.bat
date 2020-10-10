@@ -17,7 +17,6 @@ del /S *.log
 del /s *.exe
 del /s *.stat
 del /s *.tci
-del /s *.xml
 del /s *.rsm
 del /s *.bdsproj
 del /s *.identcache
