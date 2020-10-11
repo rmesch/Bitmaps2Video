@@ -4,8 +4,8 @@
         <ProjectFileVersion>12</ProjectFileVersion>
     </ProjectExtensions>
     <PropertyGroup>
-        <DeviceId Condition="'$(Platform)'=='Android'"/>
-        <DeviceId Condition="'$(Platform)'=='Android64'">HGAF6WRS</DeviceId>
+        <DeviceId Condition="'$(Platform)'=='Android'">CB512EA59X</DeviceId>
+        <DeviceId Condition="'$(Platform)'=='Android64'">CB512EA59X</DeviceId>
     </PropertyGroup>
     <ItemGroup Condition="'$(Platform)'=='Win32'">
         <DeployFile Include="Win32\Debug\MultiDemo.exe" Condition="'$(Config)'=='Debug'">
@@ -167,15 +167,6 @@
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
         </DeployFile>
-        <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-v7\libavcodec.so" Condition="'$(Config)'=='Debug'">
-            <RemoteDir>MultiDemo\library\lib\armeabi-v7a\</RemoteDir>
-            <RemoteName>libavcodec.so</RemoteName>
-            <DeployClass>File</DeployClass>
-            <Operation>0</Operation>
-            <LocalCommand/>
-            <RemoteCommand/>
-            <Overwrite>True</Overwrite>
-        </DeployFile>
         <DeployFile Include="Android\Release\styles.xml" Condition="'$(Config)'=='Release'">
             <RemoteDir>MultiDemo\res\values\</RemoteDir>
             <RemoteName>styles.xml</RemoteName>
@@ -199,6 +190,15 @@
             <RemoteName>splash_image.png</RemoteName>
             <DeployClass>Android_SplashImage426</DeployClass>
             <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
+        <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-v7\libavcodec.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>MultiDemo\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libavcodec.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
             <LocalCommand/>
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
@@ -320,20 +320,20 @@
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
         </DeployFile>
-        <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-v7\libswresample.so" Condition="'$(Config)'=='Debug'">
+        <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-v7\libswscale.so" Condition="'$(Config)'=='Release'">
             <RemoteDir>MultiDemo\library\lib\armeabi-v7a\</RemoteDir>
-            <RemoteName>libswresample.so</RemoteName>
+            <RemoteName>libswscale.so</RemoteName>
             <DeployClass>File</DeployClass>
             <Operation>0</Operation>
             <LocalCommand/>
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
         </DeployFile>
-        <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-v7\libswscale.so" Condition="'$(Config)'=='Release'">
-            <RemoteDir>MultiDemo\library\lib\armeabi-v7a\</RemoteDir>
-            <RemoteName>libswscale.so</RemoteName>
-            <DeployClass>File</DeployClass>
-            <Operation>0</Operation>
+        <DeployFile Include="Android\Debug\styles-v21.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>MultiDemo\res\values-v21\</RemoteDir>
+            <RemoteName>styles.xml</RemoteName>
+            <DeployClass>AndroidSplashStylesV21</DeployClass>
+            <Operation>1</Operation>
             <LocalCommand/>
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
@@ -347,11 +347,11 @@
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
         </DeployFile>
-        <DeployFile Include="Android\Debug\styles-v21.xml" Condition="'$(Config)'=='Debug'">
-            <RemoteDir>MultiDemo\res\values-v21\</RemoteDir>
-            <RemoteName>styles.xml</RemoteName>
-            <DeployClass>AndroidSplashStylesV21</DeployClass>
-            <Operation>1</Operation>
+        <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-v7\libswresample.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>MultiDemo\library\lib\armeabi-v7a\</RemoteDir>
+            <RemoteName>libswresample.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
             <LocalCommand/>
             <RemoteCommand/>
             <Overwrite>True</Overwrite>

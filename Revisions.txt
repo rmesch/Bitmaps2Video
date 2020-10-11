@@ -1,3 +1,5 @@
+10-11-2020
+Uploaded Android-Fix by TurboMagic
 
 10-11-2020
 Fixed possible source of floating point exception under Win64

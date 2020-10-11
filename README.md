@@ -11,7 +11,7 @@ There are 2 versions of the encoder class:
       relatively stable with H264, Mpeg-4, Mjpeg, Mpeg1/2 encoders and .avi, .mp4 containers.
  
     TBitmapEncoderM for cross platform with less features and less tested.
-      Demo currently working with Win32, Win64, Android, Android64 (hopefully again after blunder from Renate), thanks to TurboMagic
+      Demo currently working with Win32, Win64, Android, Android64 thanks to TurboMagic
 
 The cross platform demo requires at least Delphi 10.3.3 as it contains the necessary support for requesting permission to write to external storage at runtime.
 The video created on Android is stored in public downloads folder and the Androi demo compiles for both 32 and 64 bit.
