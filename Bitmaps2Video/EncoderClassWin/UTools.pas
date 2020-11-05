@@ -23,6 +23,9 @@ type
   TVideoProps = record
     Width, Height, TrueHeight: integer;
     FrameRate: integer;
+    nrVideostreams, nrAudiostreams: integer;
+    VideoCodec, AudioCodec: TAVCodecID;
+    Duration: int64;
   end;
 
   // All bitmaps should be pf32bit
@@ -68,6 +71,9 @@ function GetVideoProps(const Videofile: string): TVideoProps;
 
 procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;
   fmt_ctx: PAVFormatContext; type_: TAVMediaType);
+
+procedure ExpandToAspectRatio(const bm: TBitmap; aFrame: PAVFrame;
+  AR: TAVRational; Background: byte);
 
 // Zoom-Pan speed modifiers
 function SlowSlow(t: double): double; inline;
@@ -138,21 +144,14 @@ end;
 
 function GetVideoTime(const Videofile: string): int64;
 var
-  ret: integer;
-  fmt_ctx: PAVFormatContext;
+    {
+    ret: integer;
+      fmt_ctx: PAVFormatContext;
+  }
+  P: TVideoProps;
 begin
-  fmt_ctx := nil;
-  (* open input file, and allocate format context *)
-  ret := avformat_open_input(@fmt_ctx, PAnsiChar(AnsiString(Videofile)),
-    nil, nil);
-  try
-    assert(ret >= 0);
-    ret := avformat_find_stream_info(fmt_ctx, nil);
-    assert(ret >= 0);
-    result := round(1000 * fmt_ctx.duration / AV_TIME_BASE);
-  finally
-    avformat_close_input(@fmt_ctx);
-  end;
+  P:=GetVideoProps(Videofile);
+  result:=P.Duration;
 end;
 
 function GetVideoProps(const Videofile: string): TVideoProps;
@@ -160,7 +159,7 @@ var
   ret: integer;
   fmt_ctx: PAVFormatContext;
   p: PPAVStream;
-  sn: Cardinal;
+  vsn, {asn,} sn: Cardinal; // No of first video/audio stream
   sar: TAVRational;
 begin
   fmt_ctx := nil;
@@ -173,13 +172,41 @@ begin
     assert(ret >= 0);
     p := fmt_ctx.streams;
     sn := 0;
-    while (p^.codec.codec_type <> AVMEDIA_TYPE_VIDEO) and
-      (sn < fmt_ctx.nb_streams) do
+    result.nrVideostreams := 0;
+    result.nrAudiostreams := 0;
+    vsn := 0;
+    //asn := 0;  //future version: info about 1st audio stream
+    while (sn < fmt_ctx.nb_streams) do
     begin
+      if p^.codec.codec_type = AVMEDIA_TYPE_VIDEO then
+      begin
+        inc(result.nrVideostreams);
+        if result.nrVideostreams = 1 then
+        begin
+          vsn := sn;
+          Result.VideoCodec:=p^.codec.codec_id;
+        end;
+      end;
+      if p^.codec.codec_type = AVMEDIA_TYPE_AUDIO then
+      begin
+        inc(result.nrAudiostreams);
+        if result.nrAudiostreams = 1 then
+        begin
+          //asn := sn;
+          Result.AudioCodec:=p^.codec.codec_id;
+        end;
+      end;
       inc(p);
       inc(sn);
     end;
-    assert(sn < fmt_ctx.nb_streams, 'No video stream found in ' + Videofile);
+    assert(result.nrVideostreams > 0, 'No video stream found in ' + Videofile);
+    p := fmt_ctx.streams;
+    sn := 0;
+    while sn < vsn do
+    begin
+      inc(p);
+      inc(sn);
+    end; // p^ now is the 1st video stream
     sar := p^.codecpar.sample_aspect_ratio;
     result.Width := p^.codecpar.Width;
     result.Height := p^.codecpar.Height;
@@ -187,10 +214,14 @@ begin
       result.TrueHeight := round(p^.codecpar.Height * sar.den / sar.num)
     else
       result.TrueHeight := p^.codecpar.Height;
-    if p^.avg_frame_rate.den > 0 then
+    if p^.avg_frame_rate.den > 0 then // this should always be true ...
       result.FrameRate := round(p^.avg_frame_rate.num / p^.avg_frame_rate.den)
     else
-      result.FrameRate := p^.r_frame_rate.num;
+      result.FrameRate := p^.r_frame_rate.num; // ?
+    if p^.duration <> AV_NOPTS_VALUE then
+    Result.Duration:=round(1000*(p^.time_base.num/p^.time_base.den*p^.duration))
+    else
+    Result.Duration:=round(1000*(fmt_ctx.duration/AV_TIME_BASE));
   finally
     avformat_close_input(@fmt_ctx);
   end;
@@ -203,7 +234,6 @@ var
   video_dec_ctx: PAVCodecContext;
   Width, Height: integer;
   pix_fmt: TAVPixelFormat;
-  // video_stream: PAVStream;
   video_stream_idx: integer;
   frame: PAVFrame;
   pkt: TAVPacket;
@@ -213,21 +243,15 @@ var
   video_dst_data: array [0 .. 3] of PByte;
   video_dst_linesize: array [0 .. 3] of integer;
   convertCtx: PSwsContext;
-  rgbPic: PAVFrame;
-  X, Y: integer;
-  ps: PRGBQuad;
+  X: integer;
   row: PByte;
-  px, py: PByte;
-  jump: integer;
   bps: integer;
   sar: TAVRational;
   nh: integer;
 begin
   fmt_ctx := nil;
   video_dec_ctx := nil;
-  // video_stream := nil;
   frame := nil;
-  rgbPic := nil;
   for X := 0 to 3 do
     video_dst_data[X] := nil;
   (* open input file, and allocate format context *)
@@ -255,27 +279,19 @@ begin
   ret := av_image_alloc(@video_dst_data[0], @video_dst_linesize[0], Width,
     Height, pix_fmt, 1);
   assert(ret >= 0);
-  // Conversion Context to BGR
+  // Conversion Context to BGRA
   convertCtx := sws_getContext(Width, Height, pix_fmt, Width, nh,
-    AV_PIX_FMT_BGR24, SWS_FAST_BILINEAR, nil, nil, nil);
-  // Allocate storage for the rgb-frame
-  rgbPic := av_frame_alloc();
-  assert(rgbPic <> nil);
+    AV_PIX_FMT_BGRA, SWS_Lanczos, nil, nil, nil);
+
   frame := av_frame_alloc();
   assert(frame <> nil);
   try
-
-    rgbPic.Format := Ord(AV_PIX_FMT_BGR24);
-    rgbPic.Width := Width;
-    rgbPic.Height := nh;
-    av_frame_get_buffer(rgbPic, 0);
-
     (* initialize packet, set data to NULL, let the demuxer fill it *)
     av_init_packet(@pkt);
     pkt.data := nil;
     pkt.size := 0;
     video_frame_count := 0;
-    (* read frame FrameNumber from the file *)
+    (* read frame FrameNumber-1 frames from the file *)
     while (video_frame_count < FrameNumber - 1) do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
@@ -312,37 +328,16 @@ begin
     got_frame := 0;
     ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
     assert(ret >= 0);
-
-    // Convert the yuv-frame to rgb-frame
-    ret := av_frame_make_writable(rgbPic);
-    assert(ret >= 0);
-    ret := sws_scale(convertCtx, @frame.data, @frame.linesize, 0, Height,
-      @rgbPic.data, @rgbPic.linesize);
-    assert(ret >= 0);
-
-    // Store the frame in a bmp
+    // Convert the frame to pf32-Bitmap
     bm.PixelFormat := pf32bit;
     bm.SetSize(Width, nh);
     row := bm.ScanLine[0];
-    bps := ((Width * 32 + 31) and not 31) div 8;
-    py := @PByte(rgbPic.data[0])[0];
-    jump := rgbPic.linesize[0];
-    for Y := 0 to nh - 1 do
-    begin
-      ps := PRGBQuad(row);
-      px := py;
-      for X := 0 to Width - 1 do
-      begin
-        PRGBTriple(ps)^ := PRGBTriple(px)^;
-        inc(px, 3);
-        inc(ps);
-      end;
-      dec(row, bps);
-      inc(py, jump);
-    end;
+    bps := -((Width * 32 + 31) and not 31) div 8;
+    ret:=sws_scale(ConvertCtx,@frame.data, @frame.linesize, 0, Height,
+            @row, @bps);
+    Assert(ret>=0);
   finally
     av_packet_unref(@pkt);
-    av_frame_free(@rgbPic);
     av_frame_free(@frame);
     avcodec_free_context(@video_dec_ctx);
     sws_freeContext(convertCtx);
@@ -408,6 +403,58 @@ begin
   offsetRect(aRect, 0.5 * (BigR.Right - BigR.Left - aRect.Right + aRect.Left),
     0.5 * (BigR.Bottom - BigR.Top - aRect.Bottom + aRect.Top));
 end;
+
+procedure ExpandToAspectRatio(const bm: TBitmap; aFrame: PAVFrame;
+  AR: TAVRational; Background: byte);
+var
+  xstart, ystart: integer;
+  pix_fmt: TAVPixelFormat;
+  ret: integer;
+  bmRow, FrameRow, FrameStart: PByte;
+  y, bps, jump: integer;
+begin
+  assert((bm.Width > 0) and (bm.Height > 0));
+  bm.PixelFormat:=pf32bit;
+  if bm.Width / bm.Height < AR.num / AR.den then
+  // Add black right and left
+  begin
+    aFrame.Height := bm.Height;
+    aFrame.Width := round(bm.Height / AR.den * AR.num);
+    xstart := (aFrame.Width - bm.Width) div 2;
+    ystart := 0;
+  end
+  else
+  begin
+    aFrame.Width := bm.Width;
+    aFrame.Height := round(bm.Width / AR.num * AR.den);
+    xstart := 0;
+    ystart := (aFrame.Height - bm.Height) div 2;
+  end;
+  // Set up the Frame with the right pixelformat
+  pix_fmt := AV_PIX_FMT_BGRA;
+  aFrame.format := Ord(pix_fmt);
+  ret := av_frame_get_buffer(aFrame, 0);
+  assert(ret >= 0);
+  av_frame_make_writable(aFrame);
+  jump:=aFrame.linesize[0];
+  // Fill the frame with gray 0: black 255: white
+  FillChar(aFrame.data[0]^, aFrame.Height * jump, Background);
+
+  // Copy bm to aFrame
+    bmRow := bm.Scanline[0];
+    bps:=((bm.Width * 32 + 31) and not 31) div 8;
+    FrameRow := aFrame.data[0];
+    inc(FrameRow, ystart * jump);
+    for y := 0 to bm.Height - 1 do
+    begin
+      FrameStart := FrameRow;
+      inc(FrameStart, 4 * xstart);
+      Move(bmRow^, FrameStart^, bps);
+      dec(bmRow, bps);
+      inc(FrameRow, jump);
+    end;
+end;
+
 
 type
   TContributor = record

@@ -34,10 +34,10 @@ const
     // Theora not played by VLC-player but by Windows movie player
     AV_CODEC_ID_THEORA, AV_CODEC_ID_HEVC);
 
-  FileFormatHigh = 7;
+  FileFormatHigh = 8;
   /// <summary> The file extensions of formats I could find a codec for </summary>
   SupportedFileFormats: array [0 .. FileFormatHigh] of string = ('.avi', '.mp4',
-    '.mkv', '.f4v', '.mov', '.mpg', '.vob', '.m4v');
+    '.mkv', '.f4v', '.mov', '.mpg', '.vob', '.m4v', '.webm');
 
 type
   EFormatException = class(Exception);
@@ -139,7 +139,7 @@ function RegisterEncoder(CodecId: TAVCodecId;
 
 implementation
 
-uses System.Generics.Collections;
+uses System.Generics.Collections, UToolsM;
 
 var
   /// <Summary> Used to find the encoder setup class for a given codec-id. Use the RegisterEncoder procedure to support more codecs. </summary>
@@ -185,26 +185,18 @@ begin
 end;
 
 function GetOutputFormat(const Ext: string): PAVOutputFormat;
-var bytes: TArray<Byte>;
 begin
-  bytes:=TEncoding.UTF8.GetBytes('Example' + Ext);
-  setlength(bytes,length(bytes)+1);
-  bytes[length(bytes)-1]:=Byte(#0);
-  Result := av_guess_format(nil, PAnsiChar(@bytes[0]), nil);
+  Result := av_guess_format(nil, MarshaledAString(UTF8String('Example' + Ext)), nil);
 end;
 
 function PreferredCodec(Ext: string): TAVCodecId;
-var bytes: TArray<Byte>;
 var
   fmt: PAVOutputFormat;
 begin
   fmt := GetOutputFormat(Ext);
   if (fmt = nil) then
     raise EFormatException.Create('No matching format for ' + Ext + ' found');
-  bytes:=TEncoding.UTF8.GetBytes('Example' + Ext);
-  setlength(bytes,length(bytes)+1);
-  bytes[length(bytes)-1]:=Byte(#0);
-  Result := av_guess_codec(fmt, nil, PAnsiChar(@bytes[0]),
+  Result := av_guess_codec(fmt, nil, MarshaledAString(UTF8String('Example' + Ext)),
     nil, AVMEDIA_TYPE_VIDEO);
   if not EncoderDictionary.ContainsKey(Result) then
   begin
@@ -273,13 +265,11 @@ begin
 end;
 
 function TBaseCodecSetup.GetCodec: PAVCodec;
-var
-  Codec: PAVCodec;
 begin
-  Codec := avcodec_find_encoder(fCodecId);
-  if Codec = nil then
+  Result := avcodec_find_encoder(fCodecId);
+  if Result = nil then
     raise ECodecException.Create('Codec not found');
-  Result := Codec;
+ // Result := Codec;
 end;
 
 function TBaseCodecSetup.GetPixelformat: TAVPixelformat;
@@ -295,7 +285,7 @@ var
 begin
   SquareRoot := 1 / sqrt(192 * 108 * 30);
   factlow := 80 * SquareRoot;
-  facthigh := 700 * SquareRoot;
+  facthigh := 900 * SquareRoot;
   pixels := Width * Height * Rate;
   BitRateLow := round(sqrt(pixels) * factlow);
   // trying to match recommended values
@@ -356,7 +346,7 @@ var
 begin
   inherited;
   // these options only work for H264 and H265
-
+  fpopt:=nil;
   ret := av_dict_set(@fpopt, 'preset', 'slow', 0);
   Assert(ret >= 0, 'av_dict_set error ' + inttostr(ret));
   ret := av_dict_set(@fpopt, 'tune', 'zerolatency', 0);
@@ -377,6 +367,8 @@ end;
 initialization
 
 av_register_all();
+avcodec_register_all();
+avfilter_register_all();
 MakeEncoderDictionary;
 
 finalization

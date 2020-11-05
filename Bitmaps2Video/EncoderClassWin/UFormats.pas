@@ -269,7 +269,7 @@ var
 begin
   SquareRoot := 1 / sqrt(192 * 108 * 30);
   factlow := 80 * SquareRoot;
-  facthigh := 800 * SquareRoot;
+  facthigh := 900 * SquareRoot;
   pixels := Width * Height * Rate;
   BitRateLow := round(sqrt(pixels) * factlow);
   // trying to match recommended values

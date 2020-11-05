@@ -1,3 +1,25 @@
+11-05-2020
+*Encoder class Win:
+
+Slight speed improvement for bitmap encoding
+  
+Images and video clips which don't match the target aspect ratio get grayscale frames rather than black ones, the shade of gray can be chosen.
+
+Utility to get the properties of a video file
+
+*Encoder class Multi-Platform:
+
+Added functionalities:
+Faster encoding of bitmaps (HuichanKIM) 
+Preserve aspect ratio by adding grayscale borders
+Insert video clips
+Utilities to grab frames and display video properties of a file
+
+Still missing: De-interlace video clips before adding 
+
+Extended demo
+  	
+
 10-11-2020
 Uploaded Android-Fix by TurboMagic
 

@@ -3,7 +3,7 @@ object Form1: TForm1
   Top = 0
   Caption = 'Demo for TBitmapEncoder (Windows only)'
   ClientHeight = 403
-  ClientWidth = 548
+  ClientWidth = 609
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -55,6 +55,13 @@ object Form1: TForm1
     Width = 69
     Height = 13
     Caption = 'Output format'
+  end
+  object Label18: TLabel
+    Left = 322
+    Top = 51
+    Width = 56
+    Height = 13
+    Caption = 'Background'
   end
   object Edit1: TEdit
     Left = 18
@@ -129,7 +136,7 @@ object Form1: TForm1
       '60')
   end
   object FormatCombo: TComboBox
-    Left = 17
+    Left = 18
     Top = 121
     Width = 83
     Height = 21
@@ -159,7 +166,7 @@ object Form1: TForm1
   object PageControl1: TPageControl
     Left = 0
     Top = 178
-    Width = 548
+    Width = 609
     Height = 225
     ActivePage = TabSheet1
     Align = alBottom
@@ -191,7 +198,7 @@ object Form1: TForm1
       object Label10: TLabel
         Left = 0
         Top = 128
-        Width = 540
+        Width = 601
         Height = 69
         Align = alBottom
         Alignment = taCenter
@@ -201,8 +208,8 @@ object Form1: TForm1
           'ill be stored in the output file chosen and the encoder properti' +
           'es chosen will be used. This is a demo for the methods AddFrame,' +
           ' ZoomPan, AddStillImage and Freeze of TBitmapEncoder. If the pic' +
-          'ture does not have the aspect ratio chosen, black borders will b' +
-          'e added.'
+          'ture does not have the aspect ratio chosen, borders will be adde' +
+          'd as chosen by Background.'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 5671452
         Font.Height = -11
@@ -237,8 +244,8 @@ object Form1: TForm1
         TabOrder = 1
       end
       object Button1: TButton
-        Left = 340
-        Top = 6
+        Left = 370
+        Top = 10
         Width = 75
         Height = 25
         Caption = 'Make Movie'
@@ -246,11 +253,11 @@ object Form1: TForm1
         OnClick = Button1Click
       end
       object ProgressBar1: TProgressBar
-        Left = 340
-        Top = 56
-        Width = 139
+        Left = 370
+        Top = 52
+        Width = 155
         Height = 19
-        Max = 20000
+        Max = 19000
         MarqueeInterval = 100
         TabOrder = 3
       end
@@ -258,25 +265,23 @@ object Form1: TForm1
     object TabSheet2: TTabSheet
       Caption = 'Inserting an existing video'
       ImageIndex = 1
-      ExplicitLeft = 6
       object Label11: TLabel
         Left = 0
-        Top = 98
-        Width = 540
-        Height = 99
+        Top = 124
+        Width = 601
+        Height = 73
         Align = alBottom
         Alignment = taCenter
         AutoSize = False
         Caption = 
           'This demo shows how you can insert an existing video into your s' +
-          'lideshow. The method to be used is TBitmapEncoder.AddVideo. When' +
-          ' you push the button, load a video from your hard disk (any form' +
-          'at that VLC-player can render should be Ok). Intro- and End- Sli' +
-          'des will be added to the video and the result is stored in the o' +
-          'utput file. The video will be resized (proportionality preserved' +
-          ') and reencoded according to the settings. The frame rate will b' +
-          'e adjusted, too, without (hopefully) introducing any speedup or ' +
-          'slowdown.'
+          'lideshow via TBitmapEncoder.AddVideo. Load a video from your har' +
+          'd disk (any format that VLC-player can render should be Ok). Int' +
+          'ro- and End- Slides will be added to the video and the result is' +
+          ' stored in the output file. The video will be resized (proportio' +
+          'nality preserved) and reencoded according to the settings. Prope' +
+          'rties of the video and a picture of a frame are shown as a demo ' +
+          'of the utilitis GetVideoProps and GrabFrame in UTools.pas.'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 5671452
         Font.Height = -11
@@ -284,7 +289,6 @@ object Form1: TForm1
         Font.Style = [fsBold]
         ParentFont = False
         WordWrap = True
-        ExplicitWidth = 497
       end
       object Label12: TLabel
         Left = 194
@@ -293,9 +297,24 @@ object Form1: TForm1
         Height = 13
         Caption = '     '
       end
+      object Image2: TImage
+        Left = 172
+        Top = 3
+        Width = 153
+        Height = 110
+        Proportional = True
+        Stretch = True
+      end
+      object Label17: TLabel
+        Left = 18
+        Top = 102
+        Width = 50
+        Height = 13
+        Caption = 'Frame No.'
+      end
       object Button7: TButton
-        Left = 14
-        Top = 40
+        Left = 3
+        Top = 3
         Width = 157
         Height = 25
         Caption = 'Load and insert video'
@@ -303,23 +322,43 @@ object Form1: TForm1
         OnClick = Button7Click
       end
       object ProgressBar2: TProgressBar
-        Left = 278
-        Top = 46
-        Width = 163
+        Left = 3
+        Top = 43
+        Width = 157
         Height = 17
         TabOrder = 1
+      end
+      object MemoProps: TMemo
+        Left = 331
+        Top = 2
+        Width = 267
+        Height = 111
+        ReadOnly = True
+        ScrollBars = ssBoth
+        TabOrder = 2
+      end
+      object FrameSpin: TSpinEdit
+        Left = 74
+        Top = 96
+        Width = 82
+        Height = 22
+        MaxValue = 0
+        MinValue = 0
+        TabOrder = 3
+        Value = 15
+        OnChange = FrameSpinChange
       end
     end
     object TabSheet3: TTabSheet
       Caption = 'Create from Video'
       ImageIndex = 2
       DesignSize = (
-        540
+        601
         197)
       object Label13: TLabel
         Left = 0
         Top = 34
-        Width = 537
+        Width = 598
         Height = 83
         Alignment = taCenter
         Anchors = [akLeft, akTop, akRight]
@@ -340,6 +379,7 @@ object Form1: TForm1
         Font.Style = [fsBold]
         ParentFont = False
         WordWrap = True
+        ExplicitWidth = 537
       end
       object Label14: TLabel
         Left = 3
@@ -410,9 +450,9 @@ object Form1: TForm1
       end
       object Label16: TLabel
         Left = 0
-        Top = 98
-        Width = 540
-        Height = 99
+        Top = 114
+        Width = 601
+        Height = 83
         Align = alBottom
         Alignment = taCenter
         AutoSize = False
@@ -433,7 +473,6 @@ object Form1: TForm1
         Font.Style = [fsBold]
         ParentFont = False
         WordWrap = True
-        ExplicitWidth = 497
       end
       object Button4: TButton
         Left = 14
@@ -447,8 +486,8 @@ object Form1: TForm1
     end
   end
   object RadioGroup1: TRadioGroup
-    Left = 342
-    Top = 57
+    Left = 442
+    Top = 51
     Width = 103
     Height = 78
     Caption = 'Output aspect ratio'
@@ -458,6 +497,21 @@ object Form1: TForm1
       '4:3'
       '3:2')
     TabOrder = 9
+  end
+  object BgCombo: TComboBox
+    Left = 322
+    Top = 70
+    Width = 95
+    Height = 21
+    Style = csDropDownList
+    ItemIndex = 0
+    TabOrder = 10
+    Text = 'Black'
+    Items.Strings = (
+      'Black'
+      'White'
+      'Dark gray'
+      'Light gray')
   end
   object SD: TSaveDialog
     Filter = 

@@ -56,6 +56,12 @@ type
     Label15: TLabel;
     Label16: TLabel;
     ProgressBar2: TProgressBar;
+    MemoProps: TMemo;
+    Image2: TImage;
+    FrameSpin: TSpinEdit;
+    Label17: TLabel;
+    Label18: TLabel;
+    BgCombo: TComboBox;
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -69,6 +75,7 @@ type
     procedure CodecComboChange(Sender: TObject);
     procedure Button6Click(Sender: TObject);
     procedure Button7Click(Sender: TObject);
+    procedure FrameSpinChange(Sender: TObject);
   private
     procedure UpdateCodecCombo;
     procedure UpdateSizeinMB;
@@ -100,6 +107,7 @@ uses mmSystem, System.Types, math, UTools, Winapi.ShlObj, Winapi.ActiveX;
 
 const
   Aspects: array [0 .. 2] of double = (16 / 9, 4 / 3, 3 / 2);
+  BgColors: array [0..3] of byte = (0,255,40,180);
 
 function PIDLToPath(IdList: PItemIDList): string;
 begin
@@ -189,7 +197,7 @@ begin
 
     bme := TBitmapEncoder.Create(Edit1.Text + FormatCombo.Text, w, h,
       StrToInt(RateCombo.Text), SpinEdit1.Value,
-      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic);
+      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic, BgColors[BgCombo.ItemIndex]);
     // vsBiCubic: if it needs to scale it scales nicely
 
     try
@@ -308,7 +316,7 @@ begin
     exit;
   Label15.Caption := 'Working';
   Label15.Repaint;
-  bme := TBitmapEncoder.CreateFromVideo(OVD.FileName, Edit1.Text, vsBiCubic);
+  bme := TBitmapEncoder.CreateFromVideo(OVD.FileName, Edit1.Text, vsBiCubic,BgColors[BgCombo.ItemIndex]);
   try
     bm := TBitmap.Create;
     try
@@ -331,10 +339,26 @@ var
   bme: TBitmapEncoder;
   w, h: integer;
   Videofile: string;
+  P: TVideoProps;
 begin
   if not OVD.Execute then
     exit;
   Videofile := OVD.FileName;
+  FrameSpinChange(nil);
+  P:=GetVideoProps(Videofile);
+  MemoProps.Clear;
+  With MemoProps.Lines do
+  begin
+    add('Properties of');
+    add(ExtractFilename(Videofile)+':');
+    add('Width: '+IntTostr(P.Width));
+    add('True Height: '+IntToStr(P.TrueHeight));
+    add('Frame rate: '+IntToStr(P.FrameRate));
+    add('No. video streams: '+IntToStr(P.nrVideostreams));
+    add('No. audio streams: '+IntToStr(P.nrAudiostreams));
+    add('Duration: '+FloatToStrF(0.001*P.Duration,ffFixed,8,2)+' sec');
+    add('Video codec: '+avCodec_Find_Decoder(P.VideoCodec).name);
+  end;
   VideoAspect := Aspects[RadioGroup1.ItemIndex];
   bm := TBitmap.Create;
   try
@@ -358,7 +382,7 @@ begin
     TheProgressbar := ProgressBar2;
     bme := TBitmapEncoder.Create(Edit1.Text + FormatCombo.Text, w, h,
       StrToInt(RateCombo.Text), SpinEdit1.Value,
-      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic);
+      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic, BgColors[BgCombo.ItemIndex]);
     try
       bme.OnProgress := UpdateVideo;
       TextOnBitmap(bm, 'Intro Screen');
@@ -420,13 +444,27 @@ procedure TForm1.FormCreate(Sender: TObject);
 begin
   Edit1.Text := GetDesktopFolder + '\Example';
   ListSupportedFileFormats(FormatCombo.Items);
-  FormatCombo.ItemIndex := 0;
+  FormatCombo.ItemIndex := 1;
   UpdateCodecCombo;
   if FileExists('GoodTestPicture.png') then
     Image1.Picture.LoadFromFile('GoodTestPicture.png');
   UpdateSizeinMB;
   VideoAspect := 16 / 9;
   Randomize;
+end;
+
+procedure TForm1.FrameSpinChange(Sender: TObject);
+var bm: TBitmap;
+begin
+  if not FileExists(OVD.FileName) then
+  exit;
+  bm:=TBitmap.Create;
+  try
+    GrabFrame(bm, OVD.FileName, FrameSpin.Value);
+    Image2.Picture.Bitmap:=bm;
+  finally
+    bm.Free;
+  end;
 end;
 
 procedure TForm1.HCChange(Sender: TObject);
@@ -447,6 +485,7 @@ end;
 procedure TForm1.UpdateVideo(Videotime: int64);
 begin
   TheProgressbar.Position := Videotime;
+  TheProgressbar.Update;
 end;
 
 { TRawSetup }

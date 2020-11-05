@@ -54,10 +54,12 @@ type
     fQuality: byte;
     fFilename: string;
     fFrameCount: integer;
+    fVideoTime: int64;
     fVideoFrameCount, fVideoFrameStart: integer;
     fVideoScaling: TVideoScaling;
     fCodecId: TAVCodecId;
     fInputVideoTimebase: TAVRational;
+    fBackground: byte;
     VideoPts, VideoDts: int64;
     oc: PAVFormatContext;
     stream: PAVStream;
@@ -66,9 +68,8 @@ type
     yuvpic: PAVFrame;
     CodecSetup: TBaseCodecSetup;
     fOnProgress: TVideoProgressEvent;
-    procedure encode(frame: PAVFrame; FromVideo: boolean);
+    function encode(frame: PAVFrame; FromVideo: boolean): boolean;
     procedure BitmapToFrame(const bm: TBitmap);
-    procedure RGBFrameToBitmap(const bm: TBitmap; RGBFrame: PAVFrame);
   public
     /// <param name="filename"> Output filename. Extension picks the container format (.mp4 .avi .mkv ..)
     /// </param>
@@ -80,12 +81,12 @@ type
     /// <param name="VideoScaling">Resample algo used if video size differs from bitmap size </param>
     constructor Create(const filename: string; Width, Height: integer;
       FrameRate: integer; Quality: byte; CodecId: TAVCodecId = AV_CODEC_ID_NONE;
-      VideoScaling: TVideoScaling = vsFastBilinear);
+      VideoScaling: TVideoScaling = vsFastBilinear; Background: byte = 0);
 
     /// <summary> Use to resume work on a partially created video. All encoding, size and format settings will be read off the input file InFile.
     /// There are still some open problems with this routine.</summary>
     constructor CreateFromVideo(const InFilename, OutFilename: string;
-      VideoScaling: TVideoScaling = vsFastBilinear);
+      VideoScaling: TVideoScaling = vsFastBilinear; Background: byte = 0);
 
     /// <summary> Turn a Bitmap into a movie frame. If the aspect ratio does not match the video's one, black borders will be added. </summary>
     /// <param name="bm"> Bitmap(TBitmap) to be fed to the video. Will be converted to pf32bit if not already </param>
@@ -122,6 +123,9 @@ type
 
     /// <summary> how many frames have been added to the movie so far </summary>
     property FrameCount: integer read fFrameCount;
+
+    /// <summary> Videotime so far in ms, more accurate if the frame rate varies slightly </summary>
+    property Videotime: int64 read fVideoTime;
 
     property VideoWidth: integer read fWidth;
 
@@ -180,16 +184,17 @@ begin
   end;
 end;
 
-procedure TBitmapEncoder.encode(frame: PAVFrame; FromVideo: boolean);
+function TBitmapEncoder.encode(frame: PAVFrame; FromVideo: boolean): boolean;
 var
   ret: integer;
   pkt: TAvPacket;
 begin
+  result := true;
   inc(fFrameCount);
   if fFrameCount mod fRate = 0 then // update once per second
   begin
     if assigned(fOnProgress) then
-      fOnProgress(fFrameCount * 1000 div fRate);
+      fOnProgress(fVideoTime);
   end;
   av_init_packet(@pkt);
   pkt.data := nil;
@@ -202,7 +207,8 @@ begin
   while ret >= 0 do
   begin
     ret := avcodec_receive_packet(c, @pkt);
-    if (ret = AVERROR_EAGAIN) or (ret = AVERROR_EOF) then
+    if (ret = AVERROR_EAGAIN) or (ret = AVERROR_EOF) or (ret = AVERROR_EDEADLK)
+    then
     begin
       exit;
     end
@@ -234,8 +240,10 @@ begin
     // Write the encoded frame to the video file.
     // Can fail without causing harm, but should be checked in the debugger if frames are missing
     ret := av_interleaved_write_frame(oc, @pkt);
-
+    result := (ret >= 0);
     av_packet_unref(@pkt);
+    fVideoTime := round(1000 * av_rescale_q(av_stream_get_end_pts(stream),
+      stream.time_base, c.time_base) / fRate);
   end;
 end;
 
@@ -328,146 +336,64 @@ end;
 
 procedure TBitmapEncoder.BitmapToFrame(const bm: TBitmap);
 var
-  rgbpic: PAVFrame;
   convertCtx: PSwsContext;
-  x, y: integer;
-  ps: PRGBQuad;
   row: PByte;
   w, h, bps: integer;
-  px, py: PByte;
-  jump: integer;
   ret: integer;
   AspectDiffers: boolean;
-  nw, nh: integer;
-  cm: TBitmap;
-  r: TRectF;
-  r1: TRect;
+  rgbFrame: PAVFrame;
 const
   Epsilon = 0.1;
 begin
+  // Video ignores the alpha-channel. Size will be scaled if necessary,
+  // proportionality will now always be preserved
   bm.PixelFormat := pf32bit;
   w := bm.Width;
   h := bm.Height;
-  cm := TBitmap.Create;
-  try
-    AspectDiffers := abs(w / h - fWidth / fHeight) > Epsilon;
-    if AspectDiffers then
-    begin
-      if w / h < fWidth / fHeight then
-      // Add black left and right
-      begin
-        nh := h;
-        nw := round(nh * fWidth / fHeight);
-      end
-      else
-      // Add black top and bottom
-      begin
-        nw := w;
-        nh := round(nw * fHeight / fWidth);
-      end;
-
-      cm.PixelFormat := pf32bit;
-      cm.SetSize(nw, nh);
-      r := RectF(0, 0, w, h);
-      CenterRect(r, RectF(0, 0, nw, nh));
-      r1 := r.round;
-      bm.Canvas.Lock; // in case this is in a thread
-      cm.Canvas.Lock;
-      BitBlt(cm.Canvas.Handle, 0, 0, nw, nh, 0, 0, 0, BLACKNESS);
-      BitBlt(cm.Canvas.Handle, r1.Left, r1.Top, w, h, bm.Canvas.Handle, 0,
-        0, SRCCopy);
-      cm.Canvas.Unlock;
-      bm.Canvas.Unlock;
-      w := nw;
-      h := nh;
-    end
-    else
-      cm.Assign(bm);
-    // Set up conversion to YUV
-    convertCtx := sws_getContext(w, h, AV_PIX_FMT_BGR24, fWidth, fHeight,
-      c.pix_fmt, ScaleFunction[fVideoScaling], nil, nil, nil);
-    // Video ignores the alpha-channel. Size will be scaled if necessary,
-    // proportionality will now always be preserved
-    assert(convertCtx <> nil);
-
-    // Allocate storage for the rgb-frame
-    rgbpic := av_frame_alloc();
-    assert(rgbpic <> nil);
+  AspectDiffers := abs(w / h - fWidth / fHeight) > Epsilon;
+  if AspectDiffers then
+  begin
+    rgbFrame := av_frame_alloc;
     try
-      rgbpic.Format := Ord(AV_PIX_FMT_BGR24);
-      rgbpic.Width := w;
-      rgbpic.Height := h;
-      av_frame_get_buffer(rgbpic, 0);
-
-      // Store the bm in the frame
-      ret := av_frame_make_writable(rgbpic);
-      assert(ret >= 0);
-
-      row := cm.ScanLine[0];
-      bps := ((w * 32 + 31) and not 31) div 8;
-      py := @PByte(rgbpic.data[0])[0];
-      // it's faster with pointers instead of array
-      jump := rgbpic.linesize[0];
-      for y := 0 to h - 1 do
-      begin
-        ps := PRGBQuad(row);
-        px := py;
-        for x := 0 to w - 1 do
-        begin
-          PRGBTriple(px)^ := PRGBTriple(ps)^;
-          // works with BGR24 format
-          inc(px, 3);
-          inc(ps);
-        end;
-        dec(row, bps);
-        inc(py, jump);
+      ExpandToAspectRatio(bm, rgbFrame, av_make_q(fWidth, fHeight),
+        fBackground);
+      convertCtx := sws_getContext(rgbFrame.Width, rgbFrame.Height,
+        TAVPixelFormat(rgbFrame.format), fWidth, fHeight, c.pix_fmt,
+        ScaleFunction[fVideoScaling], nil, nil, nil);
+      Assert(convertCtx <> nil);
+      try
+        ret := av_frame_make_writable(yuvpic);
+        Assert(ret >= 0);
+        ret := sws_scale(convertCtx, @rgbFrame.data, @rgbFrame.linesize, 0,
+          rgbFrame.Height, @yuvpic.data, @yuvpic.linesize);
+        Assert(ret >= 0);
+      finally
+        sws_freeContext(convertCtx);
       end;
-
-      // Convert the rgb-frame to yuv-frame
+    finally
+      av_frame_free(@rgbFrame);
+    end;
+  end
+  else
+  begin
+    // Set up conversion to YUV
+    convertCtx := sws_getContext(w, h, AV_PIX_FMT_BGRA, fWidth, fHeight,
+      c.pix_fmt, ScaleFunction[fVideoScaling], nil, nil, nil);
+    Assert(convertCtx <> nil);
+    try
+      // Convert the bitmap-data to yuv-frame
+      bps := -(((w * 32 + 31) and not 31) div 8);
       ret := av_frame_make_writable(yuvpic);
-      assert(ret >= 0);
-      ret := sws_scale(convertCtx, @rgbpic.data, @rgbpic.linesize, 0, h,
-        @yuvpic.data, @yuvpic.linesize);
-      assert(ret >= 0);
+      Assert(ret >= 0);
+      row := bm.ScanLine[0];
+      ret := sws_scale(convertCtx, @row, @bps, 0, h, @yuvpic.data,
+        @yuvpic.linesize);
+      Assert(ret >= 0);
     finally
       sws_freeContext(convertCtx);
-      av_frame_free(@rgbpic);
       // needs to be freed and recreated for each frame
       // since the bm's could have different dimensions
     end;
-  finally
-    cm.Free;
-  end;
-end;
-
-procedure TBitmapEncoder.RGBFrameToBitmap(const bm: TBitmap;
-  RGBFrame: PAVFrame);
-var
-  row: PByte;
-  bps, jump, x, y, w, h: integer;
-  px, py: PByte;
-  ps: PRGBQuad;
-begin
-  bm.PixelFormat := pf32bit;
-  w := RGBFrame.Width;
-  h := RGBFrame.Height;
-  bm.SetSize(w, h);
-  row := bm.ScanLine[0];
-  bps := ((w * 32 + 31) and not 31) div 8;
-  py := @PByte(RGBFrame.data[0])[0];
-  jump := RGBFrame.linesize[0];
-  for y := 0 to h - 1 do
-  begin
-    ps := PRGBQuad(row);
-    px := py;
-    for x := 0 to w - 1 do
-    begin
-      PRGBTriple(ps)^ := PRGBTriple(px)^;
-      inc(px, 3);
-      inc(ps);
-    end;
-    dec(row, bps);
-    inc(py, jump);
   end;
 end;
 
@@ -519,6 +445,7 @@ var
   f: PAVFrame;
   inputs, outputs: PAVFilterInOut;
   FilterInitialized: boolean;
+  QuitLoop: boolean;
 const
   Epsilon = 0.1;
 
@@ -526,42 +453,45 @@ const
   begin
     If FilterInitialized then
       exit;
+
+    // Configure the de-interlace filter (yadif)
     snprintf(@args[0], sizeof(args),
       'buffer=video_size=%dx%d:pix_fmt=%d:time_base=1/1:pixel_aspect=0/1[in];[in]yadif[out];[out]buffersink',
-      video_dec_ctx.Width, video_dec_ctx.Height, video_dec_ctx.pix_fmt                                                                      {
-                                                                        ,
-                                                                              fInputVideoTimebase.num, fInputVideoTimebase.den, sar.num, sar.den
-                                                                      });
+      video_dec_ctx.Width, video_dec_ctx.Height, video_dec_ctx.pix_fmt);
     filter_graph := avfilter_graph_alloc();
     inputs := nil;
     outputs := nil;
     ret := avfilter_graph_parse2(filter_graph, PAnsiChar(@args[0]), @inputs,
       @outputs);
-    assert(ret >= 0);
+    Assert(ret >= 0);
     ret := avfilter_graph_config(filter_graph, nil);
-    assert(ret >= 0);
+    Assert(ret >= 0);
     buffersrc_ctx := avfilter_graph_get_filter(filter_graph, 'Parsed_buffer_0');
     buffersink_ctx := avfilter_graph_get_filter(filter_graph,
       'Parsed_buffersink_2');
-    assert(buffersrc_ctx <> nil);
-    assert(buffersink_ctx <> nil);
+    Assert(buffersrc_ctx <> nil);
+    Assert(buffersink_ctx <> nil);
 
     FilterInitialized := true;
   end;
 
-  procedure AddVideoFrame(aFrame: PAVFrame);
+  function AddVideoFrame(aFrame: PAVFrame): boolean;
+  var
+    row: PByte;
+    bps: integer;
   begin
     if AspectDiffers then
     begin
-      // Convert the yuv-frame to rgb-frame
-      ret := av_frame_make_writable(rgbpic);
-      assert(ret >= 0);
-      ret := sws_scale(convertCtx, @aFrame.data, @aFrame.linesize, 0, Height,
-        @rgbpic.data, @rgbpic.linesize);
-      assert(ret >= 0);
       bm := TBitmap.Create;
       try
-        RGBFrameToBitmap(bm, rgbpic);
+        bm.PixelFormat := pf32bit;
+        bm.SetSize(Width, TrueHeight);
+        row := bm.ScanLine[0];
+        bps := -(((Width * 32 + 31) and not 31) div 8);
+        ret := sws_scale(convertCtx, @aFrame.data, @aFrame.linesize, 0, Height,
+          @row, @bps);
+        Assert(ret >= 0);
+        // This takes care of different aspect ratio:
         BitmapToFrame(bm);
       finally
         bm.Free;
@@ -571,18 +501,18 @@ const
     begin
       // if aspect fits, scale the frame and change the pixel format, if necessary
       ret := av_frame_make_writable(yuvpic);
-      assert(ret >= 0);
+      Assert(ret >= 0);
       ret := sws_scale(convertCtx, @aFrame.data, @aFrame.linesize, 0, Height,
         @yuvpic.data, @yuvpic.linesize);
-      assert(ret >= 0);
+      Assert(ret >= 0);
     end;
-    encode(yuvpic, true);
+    result := encode(yuvpic, true);
 
     av_packet_unref(@pkt);
   end;
 
 begin
-  assert(UpperCase(fFilename) <> UpperCase(VideoInput),
+  Assert(UpperCase(fFilename) <> UpperCase(VideoInput),
     'Output file name must be different from input file name');
   FilterInitialized := False;
   filter_graph := nil;
@@ -598,11 +528,11 @@ begin
   (* open input file, and allocate format context *)
   ret := avformat_open_input(@fmt_ctx, PAnsiChar(AnsiString(VideoInput)),
     nil, nil);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 
   (* retrieve stream information *)
   ret := avformat_find_stream_info(fmt_ctx, nil);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 
   open_decoder_context(@video_stream_idx, @video_dec_ctx, fmt_ctx,
     AVMEDIA_TYPE_VIDEO);
@@ -617,7 +547,7 @@ begin
   pix_fmt := video_dec_ctx.pix_fmt;
   ret := av_image_alloc(@video_dst_data[0], @video_dst_linesize[0], Width,
     Height, pix_fmt, 1);
-  assert(ret >= 0);
+  Assert(ret >= 0);
   // calculate the true aspect ratio based on sample aspect ratio (ar of one pixel in the source)
   sar := video_dec_ctx.sample_aspect_ratio;
   if (sar.num > 0) and (sar.den > 0) then
@@ -626,27 +556,18 @@ begin
     TrueHeight := Height;
 
   AspectDiffers := abs(fWidth / fHeight - Width / TrueHeight) > Epsilon;
-  // If the aspect differs we convert to bitmap and copyrect to bitmap with black borders.
+  // If the aspect differs we convert to bitmap and copyrect to bitmap with grayscale borders.
   if AspectDiffers then
   begin
     convertCtx := sws_getContext(Width, Height, pix_fmt, Width, TrueHeight,
-      AV_PIX_FMT_BGR24, ScaleFunction[fVideoScaling], nil, nil, nil);
-    // Allocate storage for the rgb-frame
-    rgbpic := av_frame_alloc();
-    assert(rgbpic <> nil);
-
-    rgbpic.Format := Ord(AV_PIX_FMT_BGR24);
-    rgbpic.Width := Width;
-    rgbpic.Height := TrueHeight;
-    av_frame_get_buffer(rgbpic, 0);
-
+      AV_PIX_FMT_BGRA, ScaleFunction[fVideoScaling], nil, nil, nil);
   end
   else
     convertCtx := sws_getContext(Width, Height, pix_fmt, fWidth, fHeight,
       c.pix_fmt, ScaleFunction[fVideoScaling], nil, nil, nil);
 
   frame := av_frame_alloc();
-  assert(frame <> nil);
+  Assert(frame <> nil);
   try
     (* initialize packet, set data to nil, let the demuxer fill it *)
     av_init_packet(@pkt);
@@ -655,6 +576,7 @@ begin
     (* read frames from the file *)
     fVideoFrameStart := fFrameCount + 1;
     fVideoFrameCount := 0;
+    QuitLoop := False;
     while true do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
@@ -671,7 +593,7 @@ begin
       // the replacement avcode_send_packet and avcodec_receive_frame to work
       got_frame := 0;
       ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
-      assert(ret >= 0);
+      Assert(ret >= 0);
 
       if (got_frame <> 0) then
       begin
@@ -683,7 +605,7 @@ begin
           VideoPts := VideoDts;
         // Deinterlace the frame if necessary
         if frame.interlaced_frame = 0 then
-          AddVideoFrame(frame)
+          QuitLoop := QuitLoop or (not AddVideoFrame(frame))
         else
         begin
           if not FilterInitialized then
@@ -697,18 +619,19 @@ begin
             begin
               ret := av_buffersink_get_frame(buffersink_ctx, f);
               // AVError_EAgain means that more data are needed to fill the frame
-              if (ret = AVERROR_EAGAIN) or (ret = AVERROR_EOF) then
+              if (ret = AVERROR_EAGAIN) or (ret = AVERROR_EOF) or
+                (ret = AVERROR_EDEADLK) then
                 break;
-              assert(ret >= 0);
-              AddVideoFrame(f);
+              Assert(ret >= 0);
+              QuitLoop := QuitLoop or (not AddVideoFrame(f));
             end;
           finally
             av_frame_free(@f);
           end;
         end;
-      end;
-
+      end; // if got_frame
     end; // while true
+    Assert(not QuitLoop, 'Some video frames could not be added');
   finally
     if assigned(rgbpic) then
       av_frame_free(@rgbpic);
@@ -734,20 +657,20 @@ begin
   encode(nil, False);
 
   ret := av_write_trailer(oc); // Writing the end of the file.
-  assert(ret >= 0);
+  Assert(ret >= 0);
   if ((oc.oformat.flags and AVFMT_NOFILE) = 0) then
   begin
     ret := avio_closep(@oc.pb); // Closing the file.
-    assert(ret >= 0);
+    Assert(ret >= 0);
   end;
   ret := avcodec_close(stream.codec);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 end;
 
 constructor TBitmapEncoder.Create(const filename: string;
   Width, Height, FrameRate: integer; Quality: byte;
   CodecId: TAVCodecId = AV_CODEC_ID_NONE;
-  VideoScaling: TVideoScaling = vsFastBilinear);
+  VideoScaling: TVideoScaling = vsFastBilinear; Background: Byte =0);
 var
   ret: integer;
 begin
@@ -758,6 +681,7 @@ begin
   fQuality := Quality;
   fVideoScaling := VideoScaling;
   fFrameCount := 0;
+  fBackground := Background;
   if CodecId = AV_CODEC_ID_NONE then
     fCodecId := PreferredCodec(ExtractFileExt(fFilename))
   else
@@ -768,11 +692,11 @@ begin
   oc := nil;
   ret := avformat_alloc_output_context2(@oc, nil, nil,
     PAnsiChar(AnsiString(filename)));
-  assert(ret >= 0, 'avformat_alloc.. error' + Inttostr(ret));
+  Assert(ret >= 0, 'avformat_alloc.. error' + Inttostr(ret));
   stream := avformat_new_stream(oc, nil);
-  assert(stream <> nil, 'avformat_new_stream failed');
+  Assert(stream <> nil, 'avformat_new_stream failed');
   codec := CodecSetup.codec;
-  assert(codec <> nil, 'codec not found');
+  Assert(codec <> nil, 'codec not found');
 
   c := avcodec_alloc_context3(codec);
   c.Width := fWidth;
@@ -796,29 +720,29 @@ begin
     c.flags := c.flags or AV_CODEC_FLAG_GLOBAL_HEADER;
 
   ret := avcodec_open2(c, codec, @CodecSetup.OptionsDictionary);
-  assert(ret >= 0);
+  Assert(ret >= 0);
   stream.time_base := c.time_base;
   ret := avcodec_parameters_from_context(stream.codecpar, c);
   // replaces avcodec_get_context_defaults3
-  assert(ret >= 0);
+  Assert(ret >= 0);
 
   ret := avio_open(@oc.pb, PAnsiChar(AnsiString(filename)), AVIO_FLAG_WRITE);
-  assert(ret >= 0);
+  Assert(ret >= 0);
   ret := avformat_write_header(oc, @CodecSetup.OptionsDictionary);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 
   // Allocating memory for conversion output YUV frame:
   yuvpic := av_frame_alloc();
-  assert(yuvpic <> nil);
-  yuvpic.Format := Ord(CodecSetup.OutputPixelFormat);
+  Assert(yuvpic <> nil);
+  yuvpic.format := Ord(CodecSetup.OutputPixelFormat);
   yuvpic.Width := fWidth;
   yuvpic.Height := fHeight;
   ret := av_frame_get_buffer(yuvpic, 0);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 end;
 
-constructor TBitmapEncoder.CreateFromVideo(const InFilename,
-  OutFilename: string; VideoScaling: TVideoScaling);
+constructor TBitmapEncoder.CreateFromVideo(const InFilename, OutFilename: string;
+      VideoScaling: TVideoScaling = vsFastBilinear; Background: byte = 0);
 var
   ret: integer;
   ifmt_ctx: PAVFormatContext;
@@ -831,27 +755,28 @@ var
   sn: integer;
 begin
   fVideoScaling := VideoScaling;
+  fBackground := Background;
   // The extension must match InputFile
   fFilename := ExtractFilePath(OutFilename) + ExtractFileName(OutFilename) +
     ExtractFileExt(InFilename);
-  assert(UpperCase(fFilename) <> UpperCase(InFilename),
+  Assert(UpperCase(fFilename) <> UpperCase(InFilename),
     'Output file name must be different from input file name');
   ifmt_ctx := nil;
   oc := nil;
   // Read the input video
   in_filename := PAnsiChar(AnsiString(InFilename));
   ret := avformat_open_input(@ifmt_ctx, in_filename, nil, nil);
-  assert(ret = 0, Format('Could not open input file ''%s''', [in_filename]));
+  Assert(ret = 0, format('Could not open input file ''%s''', [in_filename]));
   // Read Codec Info
   ret := avformat_find_stream_info(ifmt_ctx, nil);
-  assert(ret = 0, 'Failed to retrieve input stream information');
+  Assert(ret = 0, 'Failed to retrieve input stream information');
   numstreams := ifmt_ctx.nb_streams;
   // Create Output file with oc = global output context
 
   out_filename := PAnsiChar(AnsiString(fFilename));
 
   avformat_alloc_output_context2(@oc, nil, nil, out_filename);
-  assert(assigned(oc), 'Could not create output context');
+  Assert(assigned(oc), 'Could not create output context');
 
   // Copy codec parameters from InFile to OutFile
   // First find the first video-stream
@@ -862,15 +787,15 @@ begin
     inc(p);
     inc(sn);
   end;
-  assert(sn < numstreams, 'No video stream found in ' + InFilename);
+  Assert(sn < numstreams, 'No video stream found in ' + InFilename);
   in_stream := p^;
   in_codecpar := in_stream.codecpar;
 
   stream := avformat_new_stream(oc, nil);
-  assert(assigned(stream));
+  Assert(assigned(stream));
 
   ret := avcodec_parameters_copy(stream.codecpar, in_codecpar);
-  assert(ret = 0, 'Failed to copy codec parameters');
+  Assert(ret = 0, 'Failed to copy codec parameters');
   stream.codecpar^.codec_tag.tag := 0;
   stream.time_base.num := in_stream.time_base.num;
   stream.time_base.den := in_stream.time_base.den;
@@ -894,14 +819,14 @@ begin
   if (oc.oformat.flags and AVFMT_NOFILE) = 0 then
   begin
     ret := avio_open(@oc.pb, out_filename, AVIO_FLAG_WRITE);
-    assert(ret = 0, Format('Could not open output file ''%s''',
+    Assert(ret = 0, format('Could not open output file ''%s''',
       [out_filename]));
   end
   else
-    Raise Exception.Create(Format('Could not open output file ''%s''',
+    Raise Exception.Create(format('Could not open output file ''%s''',
       [out_filename]));
   ret := avformat_write_header(oc, nil);
-  assert(ret = 0, 'Error occurred when opening output file');
+  Assert(ret = 0, 'Error occurred when opening output file');
   fFrameCount := 0;
   while true do
   begin
@@ -927,13 +852,14 @@ begin
     av_packet_rescale_ts(@pkt, in_stream.time_base, stream.time_base);
     lastVideoPkt := pkt;
     pkt.pos := -1;
-    av_interleaved_write_frame(oc, @pkt);
+    av_write_frame(oc, @pkt);
+    // av_interleaved_write_frame(oc, @pkt);
     // inc(fFrameCount);
     av_packet_unref(@pkt);
   end;
   // Create encoding context and fill with codec info using c=global encoding context
   codec := CodecSetup.codec;
-  assert(codec <> nil);
+  Assert(codec <> nil);
   c := avcodec_alloc_context3(codec);
   CodecSetup.CodecContextProps(c); // needed for the h264-Dictionary
   c.bit_rate := in_codecpar.bit_rate;
@@ -953,7 +879,8 @@ begin
   c.pix_fmt := in_stream.codec.pix_fmt;
   c.flags := in_stream.codec.flags;
   av_packet_rescale_ts(@lastVideoPkt, stream.time_base, c.time_base);
-  fFrameCount := lastVideoPkt.dts;
+  fFrameCount := av_rescale_q(av_stream_get_end_pts(stream), stream.time_base,
+    c.time_base);
   avformat_close_input(@ifmt_ctx);
 
   // if we set the global_header flag here, writing fails.
@@ -964,16 +891,16 @@ begin
 
   // make output file ready to receive new encoded frames
   ret := avcodec_open2(c, codec, @CodecSetup.OptionsDictionary);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 
   // Allocating memory for conversion output YUV frame:
   yuvpic := av_frame_alloc();
-  assert(yuvpic <> nil);
-  yuvpic.Format := Ord(c.pix_fmt);
+  Assert(yuvpic <> nil);
+  yuvpic.format := Ord(c.pix_fmt);
   yuvpic.Width := fWidth;
   yuvpic.Height := fHeight;
   ret := av_frame_get_buffer(yuvpic, 0);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 end;
 
 procedure MuxStreams2(const VideoFile, AudioFile: string;
@@ -1001,19 +928,19 @@ begin
   out_filename := PAnsiChar(AnsiString(OutputFile));
 
   ret := avformat_open_input(@ifmt_ctx1, in_filename1, nil, nil);
-  assert(ret = 0, Format('Could not open input file ''%s''', [in_filename1]));
+  Assert(ret = 0, format('Could not open input file ''%s''', [in_filename1]));
 
   ret := avformat_open_input(@ifmt_ctx2, in_filename2, nil, nil);
-  assert(ret = 0, Format('Could not open input file ''%s''', [in_filename2]));
+  Assert(ret = 0, format('Could not open input file ''%s''', [in_filename2]));
 
   ret := avformat_find_stream_info(ifmt_ctx1, nil);
-  assert(ret = 0, 'Failed to retrieve input stream information');
+  Assert(ret = 0, 'Failed to retrieve input stream information');
 
   ret := avformat_find_stream_info(ifmt_ctx2, nil);
-  assert(ret = 0, 'Failed to retrieve input stream information');
+  Assert(ret = 0, 'Failed to retrieve input stream information');
 
   avformat_alloc_output_context2(@ofmt_ctx, nil, nil, out_filename);
-  assert(assigned(ofmt_ctx), 'Could not create output context');
+  Assert(assigned(ofmt_ctx), 'Could not create output context');
 
   ofmt := ofmt_ctx.oformat;
 
@@ -1026,7 +953,7 @@ begin
     inc(p);
     inc(sn);
   end;
-  assert((sn < ifmt_ctx1.nb_streams) and
+  Assert((sn < ifmt_ctx1.nb_streams) and
     (p^.codec.codec_type = AVMEDIA_TYPE_VIDEO), 'No video stream found in ' +
     VideoFile);
   VideoStreamIndex := sn;
@@ -1034,10 +961,10 @@ begin
   in_codecpar := in_streamV.codecpar;
 
   out_streamV := avformat_new_stream(ofmt_ctx, nil);
-  assert(assigned(out_streamV));
+  Assert(assigned(out_streamV));
 
   ret := avcodec_parameters_copy(out_streamV.codecpar, in_codecpar);
-  assert(ret = 0, 'Failed to copy codec parameters');
+  Assert(ret = 0, 'Failed to copy codec parameters');
   out_streamV.codecpar^.codec_tag.tag := 0;
   out_streamV.time_base.num := in_streamV.time_base.num;
   out_streamV.time_base.den := in_streamV.time_base.den;
@@ -1052,7 +979,7 @@ begin
     inc(p);
     inc(sn);
   end;
-  assert((sn < ifmt_ctx2.nb_streams) and
+  Assert((sn < ifmt_ctx2.nb_streams) and
     (p^.codec.codec_type = AVMEDIA_TYPE_AUDIO), 'No audio stream found in ' +
     AudioFile);
   AudioStreamIndex := sn;
@@ -1060,21 +987,21 @@ begin
   in_codecpar := in_streamA.codecpar;
 
   out_streamA := avformat_new_stream(ofmt_ctx, nil);
-  assert(assigned(out_streamA));
+  Assert(assigned(out_streamA));
 
   ret := avcodec_parameters_copy(out_streamA.codecpar, in_codecpar);
-  assert(ret = 0, 'Failed to copy codec parameters');
+  Assert(ret = 0, 'Failed to copy codec parameters');
   out_streamA.codecpar^.codec_tag.tag := 0;
 
   if (ofmt.flags and AVFMT_NOFILE) = 0 then
   begin
     ret := avio_open(@ofmt_ctx.pb, out_filename, AVIO_FLAG_WRITE);
-    assert(ret = 0, Format('Could not open output file ''%s''',
+    Assert(ret = 0, format('Could not open output file ''%s''',
       [out_filename]));
   end;
 
   ret := avformat_write_header(ofmt_ctx, nil);
-  assert(ret = 0, 'Error occurred when opening output file');
+  Assert(ret = 0, 'Error occurred when opening output file');
   p := ofmt_ctx.streams;
   out_streamV := p^;
   inc(p, 1);
@@ -1106,9 +1033,10 @@ begin
     pkt.pos := -1;
 
     ret := av_interleaved_write_frame(ofmt_ctx, @pkt);
-    assert(ret >= 0);
+    if ret < 0 then
+      break;
     Videotime := av_stream_get_end_pts(out_streamV);
-    while AudioTime < Videotime do
+    while (AudioTime < Videotime) and (ret >= 0) do
     begin
       ret := av_read_frame(ifmt_ctx2, @pkt);
       if ret < 0 then
@@ -1131,7 +1059,7 @@ begin
         out_streamA.time_base);
       pkt.pos := -1;
       ret := av_interleaved_write_frame(ofmt_ctx, @pkt);
-      assert(ret >= 0);
+      // assert(ret >= 0);
       av_packet_unref(@pkt);
       AudioTime := av_rescale_q(av_stream_get_end_pts(out_streamA),
         out_streamA.time_base, out_streamV.time_base);
@@ -1148,7 +1076,7 @@ begin
     avio_closep(@ofmt_ctx.pb);
   avformat_free_context(ofmt_ctx);
 
-  assert((ret >= 0) or (ret = AVERROR_EOF));
+  Assert((ret >= 0) or (ret = AVERROR_EOF));
 end;
 
 destructor TBitmapEncoder.Destroy;
