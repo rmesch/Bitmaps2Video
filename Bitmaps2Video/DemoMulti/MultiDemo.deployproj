@@ -378,6 +378,15 @@
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
         </DeployFile>
+        <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-x64\libswscale.so" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>MultiDemo\library\lib\arm64-v8a\</RemoteDir>
+            <RemoteName>libswscale.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>0</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
         <DeployFile Include="Android64\Debug\libMultiDemo.so" Condition="'$(Config)'=='Debug'">
             <RemoteDir>MultiDemo\library\lib\arm64-v8a\</RemoteDir>
             <RemoteName>libMultiDemo.so</RemoteName>
@@ -387,15 +396,6 @@
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
             <Required>True</Required>
-        </DeployFile>
-        <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-x64\libswscale.so" Condition="'$(Config)'=='Debug'">
-            <RemoteDir>MultiDemo\library\lib\arm64-v8a\</RemoteDir>
-            <RemoteName>libswscale.so</RemoteName>
-            <DeployClass>File</DeployClass>
-            <Operation>0</Operation>
-            <LocalCommand/>
-            <RemoteCommand/>
-            <Overwrite>True</Overwrite>
         </DeployFile>
         <DeployFile Include="$(BDS)\bin\Artwork\Android\FM_LauncherIcon_36x36.png" Condition="'$(Config)'=='Debug'">
             <RemoteDir>MultiDemo\res\drawable-ldpi\</RemoteDir>

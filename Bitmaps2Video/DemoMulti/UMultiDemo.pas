@@ -19,7 +19,7 @@ uses
   Androidapi.Jni.JavaTypes,
 {$ENDIF}
   FMX.SpinBox, FMX.TabControl, FMX.MediaLibrary, FMX.Platform,
-  System.Messaging, FMX.ScrollBox, FMX.Memo;
+  System.Messaging, FMX.ScrollBox, FMX.Memo, FFMPEG;
 
 type
   TMovieProc = procedure(const filename: string) of object;
@@ -70,6 +70,7 @@ type
     Label16: TLabel;
     Label17: TLabel;
     BgCombo: TComboBox;
+    Button4: TButton;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure FormatComboChange(Sender: TObject);
@@ -83,7 +84,7 @@ type
     FMessageSubscriptionID: integer;
 {$ENDIF}
     MovieProc: TMovieProc;
-    fVideoFilename: string;
+    fVideoFilename, fOutputFile: string;
     procedure UpdateCodecCombo;
 {$IFDEF ANDROID}
     /// <summary>
@@ -111,6 +112,7 @@ type
       cb, ct: Cardinal);
     procedure WriteTextOnBitmap(const bm: TBitmap; const text: String;
       ct: Cardinal);
+    procedure InsertVideo(NewW, NewH, FrameRate: integer; CodecID: TAVCodecId);
   public
     TheProgressbar: TProgressBar;
     procedure MakeMovie(const filename: string);
@@ -126,7 +128,7 @@ implementation
 {$R *.fmx}
 
 uses
-  UFormatsM, UBitmaps2VideoM, FFMPEG,
+  UFormatsM, UBitmaps2VideoM,
   math, IOUtils, System.Threading, FMX.DialogService,
   UToolsM, System.UIConsts;
 
@@ -155,11 +157,11 @@ procedure TForm1.MakeTextBitmap(const bm: TBitmap; const text: String;
 var
   am: TBitmap;
 begin
-  //Run this in the main thread
+  // Run this in the main thread
   TThread.Synchronize(TThread.Current,
     procedure
     begin
-      //Use the canvas of a temporary bitmap
+      // Use the canvas of a temporary bitmap
       am := TBitmap.Create;
       try
         am.SetSize(bm.Width, bm.Height);
@@ -170,7 +172,7 @@ begin
         am.Canvas.FillText(RectF(0, 0, bm.Width, bm.Height), text, False, 1, [],
           TTextAlign.Center, TTextAlign.Center);
         am.Canvas.EndScene;
-        //Copy the pixels to the result-bitmap
+        // Copy the pixels to the result-bitmap
         bm.CopyFromBitmap(am);
       finally
         am.Free;
@@ -194,7 +196,7 @@ begin
         am.Canvas.Font.Size := 30;
         am.Canvas.Fill.Color := ct;
         am.Canvas.FillText(RectF(0, 0, bm.Width, bm.Height), text, True, 1, [],
-          TTextAlign.Center, TTextAlign.Trailing);
+          TTextAlign.Center, TTextAlign.Leading);
         am.Canvas.EndScene;
         bm.CopyFromBitmap(am);
       finally
@@ -206,13 +208,10 @@ end;
 procedure TForm1.Button3Click(Sender: TObject);
 var
   P: TVideoProps;
-  bme: TBitmapEncoderM;
   NewW, NewH: integer;
-  OutputFile: string;
-  CodecID: TAVCodecID;
+  CodecID: TAVCodecId;
   FrameRate: integer;
   aTask: TThread;
-  bm: TBitmap;
 begin
   if fVideoFilename = '' then
   begin
@@ -230,47 +229,60 @@ begin
     dec(NewW);
   CodecID := AV_CODEC_ID_NONE;
   if CodecCombo.ItemIndex >= 0 then
-    CodecID := TAVCodecID(TCodecIdWrapper(CodecCombo.Items.Objects
+    CodecID := TAVCodecId(TCodecIdWrapper(CodecCombo.Items.Objects
       [CodecCombo.ItemIndex]).CodecID);
   FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
 {$IFDEF ANDROID}
-  OutputFile := TPath.Combine(TPath.GetSharedDownloadsPath,
+  fOutputFile := TPath.Combine(TPath.GetSharedDownloadsPath,
     Edit1.text + FormatCombo.Items[FormatCombo.ItemIndex]);
 {$ELSE}
-  OutputFile := TPath.Combine(TPath.GetMoviesPath,
+  fOutputFile := TPath.Combine(TPath.GetMoviesPath,
     Edit1.text + FormatCombo.Items[FormatCombo.ItemIndex]);
 {$ENDIF}
-  aTask := TThread.CreateAnonymousThread(
-    procedure
-    begin
-      bme := TBitmapEncoderM.Create(OutputFile, NewW, NewH, FrameRate,
-        trunc(SpinBox1.Value), CodecID, vsBicubic, BgColors[BgCombo.ItemIndex]);
-      bme.OnProgress := ShowProgress;
-      try
-        bm := TBitmap.Create;
-        try
-          GrabFrame(bm, fVideoFilename, 1);
-          WriteTextOnBitmap(bm, 'THE START'#13#13' ', claDarkRed);
-          bme.AddStillImage(bm, 3000);
-        finally
-          bm.Free;
-        end;
-        bme.AddVideo(fVideoFilename);
-        bm := TBitmap.Create;
-        try
-          bm.SetSize(NewW, NewH);
-          MakeTextBitmap(bm, 'THE END', claBlack, claYellow);
-          bme.AddStillImage(bm, 3000);
-        finally
-          bm.Free;
-        end;
-        bme.CloseFile;
-      finally
-        bme.Free;
-      end;
+  if Sender = Button3 then
+  begin
+    aTask := TThread.CreateAnonymousThread(
+      procedure
+      begin
+        InsertVideo(NewW, NewH, FrameRate, CodecID);
+      end);
+    aTask.Start;
+  end
+  else
+    InsertVideo(NewW, NewH, FrameRate, CodecID);
+end;
 
-    end);
-  aTask.Start;
+procedure TForm1.InsertVideo(NewW, NewH, FrameRate: integer;
+CodecID: TAVCodecId);
+var
+  bme: TBitmapEncoderM;
+  bm: TBitmap;
+begin
+  bme := TBitmapEncoderM.Create(fOutputFile, NewW, NewH, FrameRate,
+    trunc(SpinBox1.Value), CodecID, vsBicubic, BgColors[BgCombo.ItemIndex]);
+  bme.OnProgress := ShowProgress;
+  try
+    bm := TBitmap.Create;
+    try
+      GrabFrame(bm, fVideoFilename, 1);
+      WriteTextOnBitmap(bm, ' '#13'THE START', claDarkRed);
+      bme.AddStillImage(bm, 3000);
+    finally
+      bm.Free;
+    end;
+    bme.AddVideo(fVideoFilename);
+    bm := TBitmap.Create;
+    try
+      bm.SetSize(NewW, NewH);
+      MakeTextBitmap(bm, 'THE END', claBlack, claYellow);
+      bme.AddStillImage(bm, 3000);
+    finally
+      bm.Free;
+    end;
+    bme.CloseFile;
+  finally
+    bme.Free;
+  end;
 end;
 
 procedure TForm1.GrabAFrame;
@@ -390,7 +402,7 @@ begin
     begin
       // fVideoFilename is a field of the form
       fVideoFilename := JStringToString(C.getString(I));
-      Result := true;
+      Result := True;
       Break;
     end;
   end;
@@ -457,7 +469,7 @@ var
   PeriodRed, PeriodGreen, PeriodBlue: double;
   Width, Height: integer;
   FrameTime: double;
-  CodecID: TAVCodecID;
+  CodecID: TAVCodecId;
   FrameRate: integer;
   asp: double;
   aTask: iTask;
@@ -471,7 +483,7 @@ begin
       Width := Round(asp * Height);
       CodecID := AV_CODEC_ID_NONE;
       if CodecCombo.ItemIndex >= 0 then
-        CodecID := TAVCodecID(TCodecIdWrapper(CodecCombo.Items.Objects
+        CodecID := TAVCodecId(TCodecIdWrapper(CodecCombo.Items.Objects
           [CodecCombo.ItemIndex]).CodecID);
       FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
       FrameTime := 1 / FrameRate;
@@ -506,7 +518,7 @@ procedure TForm1.MakeSlideshow(const filename: string);
 var
   bme: TBitmapEncoderM;
   Width, Height: integer;
-  CodecID: TAVCodecID;
+  CodecID: TAVCodecId;
   FrameRate: integer;
   aTask: iTask;
   bm: TBitmap;
@@ -526,12 +538,12 @@ begin
           dec(Width);
         CodecID := AV_CODEC_ID_NONE;
         if CodecCombo.ItemIndex >= 0 then
-          CodecID := TAVCodecID(TCodecIdWrapper(CodecCombo.Items.Objects
+          CodecID := TAVCodecId(TCodecIdWrapper(CodecCombo.Items.Objects
             [CodecCombo.ItemIndex]).CodecID);
         FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
         bme := TBitmapEncoderM.Create(filename, Width, Height, FrameRate,
-          trunc(SpinBox1.Value), CodecID, vsBicubic, BgColors[BgCombo.ItemIndex]
-          );
+          trunc(SpinBox1.Value), CodecID, vsBicubic,
+          BgColors[BgCombo.ItemIndex]);
         try
           bme.OnProgress := ShowProgress;
           // 18 sec of movie

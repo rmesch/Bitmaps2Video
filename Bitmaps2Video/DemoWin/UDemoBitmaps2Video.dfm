@@ -2,7 +2,7 @@ object Form1: TForm1
   Left = 0
   Top = 0
   Caption = 'Demo for TBitmapEncoder (Windows only)'
-  ClientHeight = 403
+  ClientHeight = 475
   ClientWidth = 609
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -165,14 +165,15 @@ object Form1: TForm1
   end
   object PageControl1: TPageControl
     Left = 0
-    Top = 178
+    Top = 186
     Width = 609
-    Height = 225
+    Height = 289
     ActivePage = TabSheet1
     Align = alBottom
     TabOrder = 8
     object TabSheet1: TTabSheet
       Caption = 'Zooming'
+      ExplicitHeight = 197
       object Image1: TImage
         Left = 9
         Top = 10
@@ -197,7 +198,7 @@ object Form1: TForm1
       end
       object Label10: TLabel
         Left = 0
-        Top = 128
+        Top = 192
         Width = 601
         Height = 69
         Align = alBottom
@@ -257,7 +258,7 @@ object Form1: TForm1
         Top = 52
         Width = 155
         Height = 19
-        Max = 19000
+        Max = 17000
         MarqueeInterval = 100
         TabOrder = 3
       end
@@ -265,9 +266,10 @@ object Form1: TForm1
     object TabSheet2: TTabSheet
       Caption = 'Inserting an existing video'
       ImageIndex = 1
+      ExplicitTop = 26
       object Label11: TLabel
         Left = 0
-        Top = 124
+        Top = 188
         Width = 601
         Height = 73
         Align = alBottom
@@ -289,6 +291,7 @@ object Form1: TForm1
         Font.Style = [fsBold]
         ParentFont = False
         WordWrap = True
+        ExplicitTop = 124
       end
       object Label12: TLabel
         Left = 194
@@ -298,33 +301,40 @@ object Form1: TForm1
         Caption = '     '
       end
       object Image2: TImage
-        Left = 172
-        Top = 3
+        Left = 3
+        Top = 79
         Width = 153
         Height = 110
         Proportional = True
         Stretch = True
       end
       object Label17: TLabel
-        Left = 18
-        Top = 102
+        Left = 166
+        Top = 82
         Width = 50
         Height = 13
         Caption = 'Frame No.'
+      end
+      object Label19: TLabel
+        Left = 3
+        Top = 34
+        Width = 104
+        Height = 13
+        Caption = 'Video clip to process: '
       end
       object Button7: TButton
         Left = 3
         Top = 3
         Width = 157
         Height = 25
-        Caption = 'Load and insert video'
+        Caption = 'Load a video clip'
         TabOrder = 0
         OnClick = Button7Click
       end
       object ProgressBar2: TProgressBar
-        Left = 3
-        Top = 43
-        Width = 157
+        Left = 277
+        Top = 163
+        Width = 308
         Height = 17
         TabOrder = 1
       end
@@ -338,8 +348,8 @@ object Form1: TForm1
         TabOrder = 2
       end
       object FrameSpin: TSpinEdit
-        Left = 74
-        Top = 96
+        Left = 166
+        Top = 106
         Width = 82
         Height = 22
         MaxValue = 0
@@ -348,13 +358,41 @@ object Form1: TForm1
         Value = 15
         OnChange = FrameSpinChange
       end
+      object EditVideoFile: TEdit
+        Left = 3
+        Top = 48
+        Width = 315
+        Height = 21
+        Alignment = taRightJustify
+        ReadOnly = True
+        TabOrder = 4
+      end
+      object Button8: TButton
+        Left = 277
+        Top = 128
+        Width = 143
+        Height = 25
+        Caption = 'Insert Clip (main thread)'
+        TabOrder = 5
+        OnClick = Button8Click
+      end
+      object Button9: TButton
+        Left = 434
+        Top = 128
+        Width = 164
+        Height = 25
+        Caption = 'Insert Clip (background thread)'
+        TabOrder = 6
+        OnClick = Button9Click
+      end
     end
     object TabSheet3: TTabSheet
       Caption = 'Create from Video'
       ImageIndex = 2
+      ExplicitHeight = 197
       DesignSize = (
         601
-        197)
+        261)
       object Label13: TLabel
         Left = 0
         Top = 34
@@ -385,7 +423,7 @@ object Form1: TForm1
         Left = 3
         Top = 123
         Width = 212
-        Height = 66
+        Height = 98
         AutoSize = False
         Caption = 
           'This is the theory. In practice, it does not yet always work as ' +
@@ -416,10 +454,10 @@ object Form1: TForm1
         OnClick = Button6Click
       end
       object Memo1: TMemo
-        Left = 225
-        Top = 119
+        Left = 243
+        Top = 117
         Width = 316
-        Height = 77
+        Height = 110
         Lines.Strings = (
           'If the unfinished video contains a reencoded video, '
           'there might be a problem with the proper timing,'
@@ -441,6 +479,7 @@ object Form1: TForm1
     object TabSheet4: TTabSheet
       Caption = 'Add Audio'
       ImageIndex = 3
+      ExplicitHeight = 197
       object Label5: TLabel
         Left = 20
         Top = 59
@@ -450,7 +489,7 @@ object Form1: TForm1
       end
       object Label16: TLabel
         Left = 0
-        Top = 114
+        Top = 178
         Width = 601
         Height = 83
         Align = alBottom
@@ -473,6 +512,7 @@ object Form1: TForm1
         Font.Style = [fsBold]
         ParentFont = False
         WordWrap = True
+        ExplicitTop = 114
       end
       object Button4: TButton
         Left = 14

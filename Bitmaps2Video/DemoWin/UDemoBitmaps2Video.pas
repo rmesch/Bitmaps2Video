@@ -62,6 +62,10 @@ type
     Label17: TLabel;
     Label18: TLabel;
     BgCombo: TComboBox;
+    EditVideoFile: TEdit;
+    Label19: TLabel;
+    Button8: TButton;
+    Button9: TButton;
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -76,9 +80,13 @@ type
     procedure Button6Click(Sender: TObject);
     procedure Button7Click(Sender: TObject);
     procedure FrameSpinChange(Sender: TObject);
+    procedure Button8Click(Sender: TObject);
+    procedure Button9Click(Sender: TObject);
   private
+    fVideoFile: string;
     procedure UpdateCodecCombo;
     procedure UpdateSizeinMB;
+    procedure InsertVideo;
     { Private declarations }
   public
     { Public declarations }
@@ -103,11 +111,11 @@ implementation
 
 {$R *.dfm}
 
-uses mmSystem, System.Types, math, UTools, Winapi.ShlObj, Winapi.ActiveX;
+uses mmSystem, System.Types, math, UTools, Winapi.ShlObj, Winapi.ActiveX, System.Threading;
 
 const
   Aspects: array [0 .. 2] of double = (16 / 9, 4 / 3, 3 / 2);
-  BgColors: array [0..3] of byte = (0,255,40,180);
+  BgColors: array [0 .. 3] of byte = (0, 255, 40, 180);
 
 function PIDLToPath(IdList: PItemIDList): string;
 begin
@@ -197,12 +205,13 @@ begin
 
     bme := TBitmapEncoder.Create(Edit1.Text + FormatCombo.Text, w, h,
       StrToInt(RateCombo.Text), SpinEdit1.Value,
-      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic, BgColors[BgCombo.ItemIndex]);
+      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic,
+      BgColors[BgCombo.ItemIndex]);
     // vsBiCubic: if it needs to scale it scales nicely
 
     try
       TheProgressbar := ProgressBar1;
-      ProgressBar1.Max := 20000;
+      ProgressBar1.Max := 19000;
       ProgressBar1.Position := 0;
       bme.OnProgress := UpdateVideo;
       // 20 seconds of movie
@@ -287,23 +296,30 @@ var
   r: TRect;
   r1: TRectF;
 begin
-  bm.Canvas.Font.Color := clWhite;
-  bm.Canvas.Brush.style := bsClear;
-  bm.Canvas.Font.Size := 32;
-  r := Rect(0, 0, bm.Width, bm.Height);
-  DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r,
-    dt_Center or dt_CalcRect);
-  r1 := TRectF(r);
-  CenterRect(r1, RectF(0, 0, bm.Width, bm.Height));
-  r := r1.round;
-  DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r, dt_Center);
+  bm.Canvas.Lock;
+  try
+    bm.Canvas.Font.Color := clWhite;
+    bm.Canvas.Brush.style := bsClear;
+    bm.Canvas.Font.Size := 32;
+    r := Rect(0, 0, bm.Width, bm.Height);
+    DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r,
+      dt_Center or dt_CalcRect);
+    r1 := TRectF(r);
+    CenterRect(r1, RectF(0, 0, bm.Width, bm.Height));
+    r := r1.round;
+    DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r, dt_Center);
+  Finally
+    bm.Canvas.Unlock;
+  End;
 end;
 
 procedure BlackBitmap(const bm: TBitmap; w, h: integer);
 begin
   bm.PixelFormat := pf32bit;
   bm.SetSize(w, h);
+  bm.Canvas.Lock; // necessary for threads
   BitBlt(bm.Canvas.Handle, 0, 0, w, h, 0, 0, 0, BLACKNESS);
+  bm.Canvas.Unlock;
 end;
 
 procedure TForm1.Button6Click(Sender: TObject);
@@ -316,7 +332,8 @@ begin
     exit;
   Label15.Caption := 'Working';
   Label15.Repaint;
-  bme := TBitmapEncoder.CreateFromVideo(OVD.FileName, Edit1.Text, vsBiCubic,BgColors[BgCombo.ItemIndex]);
+  bme := TBitmapEncoder.CreateFromVideo(OVD.FileName, Edit1.Text, vsBiCubic,
+    BgColors[BgCombo.ItemIndex]);
   try
     bm := TBitmap.Create;
     try
@@ -338,27 +355,62 @@ var
   bm: TBitmap;
   bme: TBitmapEncoder;
   w, h: integer;
-  Videofile: string;
   P: TVideoProps;
 begin
   if not OVD.Execute then
     exit;
-  Videofile := OVD.FileName;
+  fVideoFile := OVD.FileName;
+  EditVideoFile.Text := fVideoFile;
   FrameSpinChange(nil);
-  P:=GetVideoProps(Videofile);
+  P := GetVideoProps(fVideoFile);
   MemoProps.Clear;
   With MemoProps.Lines do
   begin
     add('Properties of');
-    add(ExtractFilename(Videofile)+':');
-    add('Width: '+IntTostr(P.Width));
-    add('True Height: '+IntToStr(P.TrueHeight));
-    add('Frame rate: '+IntToStr(P.FrameRate));
-    add('No. video streams: '+IntToStr(P.nrVideostreams));
-    add('No. audio streams: '+IntToStr(P.nrAudiostreams));
-    add('Duration: '+FloatToStrF(0.001*P.Duration,ffFixed,8,2)+' sec');
-    add('Video codec: '+avCodec_Find_Decoder(P.VideoCodec).name);
+    add(ExtractFilename(fVideoFile) + ':');
+    add('Width: ' + IntTostr(P.Width));
+    add('True Height: ' + IntTostr(P.TrueHeight));
+    add('Frame rate: ' + IntTostr(P.FrameRate));
+    add('No. video streams: ' + IntTostr(P.nrVideostreams));
+    add('No. audio streams: ' + IntTostr(P.nrAudiostreams));
+    add('Duration: ' + FloatToStrF(0.001 * P.Duration, ffFixed, 8, 2) + ' sec');
+    add('Video codec: ' + avCodec_Find_Decoder(P.VideoCodec).name);
   end;
+
+end;
+
+procedure TForm1.Button8Click(Sender: TObject);
+begin
+  Label12.Caption := 'Working';
+  Label12.Repaint;
+  ProgressBar2.Max := GetVideoTime(fVideoFile);
+  ProgressBar2.Position := 0;
+  TheProgressbar := ProgressBar2;
+  InsertVideo;
+end;
+
+procedure TForm1.Button9Click(Sender: TObject);
+var aTask: iTask;
+begin
+  Label12.Caption := 'Working';
+  Label12.Repaint;
+  ProgressBar2.Max := GetVideoTime(fVideofile);
+  ProgressBar2.Position := 0;
+  TheProgressbar := ProgressBar2;
+  aTask:=TTask.Create(
+  procedure
+  begin
+    InsertVideo;
+  end);
+  aTask.Start;
+end;
+
+procedure TForm1.InsertVideo;
+var
+  bm: TBitmap;
+  w, h: integer;
+  bme: TBitmapEncoder;
+begin
   VideoAspect := Aspects[RadioGroup1.ItemIndex];
   bm := TBitmap.Create;
   try
@@ -369,29 +421,26 @@ begin
       dec(w);
     // load the 1st frame from the video
     try
-      GrabFrame(bm, Videofile, 1);
+      GrabFrame(bm, fVideoFile, 1);
     except
       // We catch the exception, since GrabFrame does not
       // yet work reliably with foreign video content
       BlackBitmap(bm, w, h);
     end;
-    Label12.Caption := 'Working';
-    Label12.Repaint;
-    ProgressBar2.Max := GetVideoTime(Videofile);
-    ProgressBar2.Position := 0;
-    TheProgressbar := ProgressBar2;
+
     bme := TBitmapEncoder.Create(Edit1.Text + FormatCombo.Text, w, h,
       StrToInt(RateCombo.Text), SpinEdit1.Value,
-      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic, BgColors[BgCombo.ItemIndex]);
+      TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic,
+      BgColors[BgCombo.ItemIndex]);
     try
       bme.OnProgress := UpdateVideo;
       TextOnBitmap(bm, 'Intro Screen');
       bme.AddStillImage(bm, 5000);
-      bme.AddVideo(OVD.FileName);
+      bme.AddVideo(fVideoFile);
       // bme.LastVideoFrameCount always contains the frame count of the last
       // added video.
       try
-        GrabFrame(bm, OVD.FileName, bme.LastVideoFrameCount - 2);
+        GrabFrame(bm, fVideoFile, bme.LastVideoFrameCount - 2);
       except
         BlackBitmap(bm, w, h);
       end;
@@ -404,7 +453,11 @@ begin
   finally
     bm.Free;
   end;
-  Label12.Caption := 'Done';
+  TThread.Synchronize(TThread.Current,
+    procedure
+    begin
+      Label12.Caption := 'Done';
+    end);
 end;
 
 procedure TForm1.CodecComboChange(Sender: TObject);
@@ -454,14 +507,15 @@ begin
 end;
 
 procedure TForm1.FrameSpinChange(Sender: TObject);
-var bm: TBitmap;
+var
+  bm: TBitmap;
 begin
-  if not FileExists(OVD.FileName) then
-  exit;
-  bm:=TBitmap.Create;
+  if not FileExists(fVideoFile) then
+    exit;
+  bm := TBitmap.Create;
   try
-    GrabFrame(bm, OVD.FileName, FrameSpin.Value);
-    Image2.Picture.Bitmap:=bm;
+    GrabFrame(bm, fVideoFile, FrameSpin.Value);
+    Image2.Picture.Bitmap := bm;
   finally
     bm.Free;
   end;
@@ -484,8 +538,12 @@ end;
 
 procedure TForm1.UpdateVideo(Videotime: int64);
 begin
-  TheProgressbar.Position := Videotime;
-  TheProgressbar.Update;
+  TThread.Synchronize(TThread.Current,
+    procedure
+    begin
+      TheProgressbar.Position := Videotime;
+      TheProgressbar.Update;
+    end);
 end;
 
 { TRawSetup }
@@ -497,7 +555,7 @@ begin
 end;
 
 function TRawSetup.QualityToBitrate(Quality: byte;
-  Width, Height, Rate: integer): int64;
+Width, Height, Rate: integer): int64;
 begin
   Result := 0;
 end;

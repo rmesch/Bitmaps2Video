@@ -5,11 +5,11 @@
 	</ActiveMobileDevice>
 	<BT_BuildType>Debug</BT_BuildType>
 	<Transactions>
-    <Transaction>1899.12.30 00:00:00.000.366,D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\Unit1.fmx=D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\UFrameUnused.fmx</Transaction>
-    <Transaction>1899.12.30 00:00:00.000.366,D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\Unit1.pas=D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\UFrameUnused.pas</Transaction>
     <Transaction>1899.12.30 00:00:00.000.907,=D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\Unit1.pas</Transaction>
-    <Transaction>1899.12.30 00:00:00.000.402,D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\Unit1.pas=D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\EncoderClassMulti\UToolsM.pas</Transaction>
     <Transaction>1899.12.30 00:00:00.000.332,=D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\Unit1.pas</Transaction>
-    <Transaction>2020.11.05 12:16:50.567,D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\UFrameUnused.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.402,D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\EncoderClassMulti\UToolsM.pas=D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\Unit1.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.366,D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\UFrameUnused.fmx=D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\Unit1.fmx</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.366,D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\UFrameUnused.pas=D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\Unit1.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.567,D:\DelphiSource\DelphiRio\mystuffR\Bitmaps2Video\DemoMulti\UFrameUnused.pas=</Transaction>
   </Transactions>
 </BorlandProject>
