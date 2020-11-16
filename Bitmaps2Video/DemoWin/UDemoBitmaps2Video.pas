@@ -81,18 +81,18 @@ type
     procedure Button7Click(Sender: TObject);
     procedure FrameSpinChange(Sender: TObject);
     procedure Button8Click(Sender: TObject);
-    procedure Button9Click(Sender: TObject);
   private
     fVideoFile: string;
     procedure UpdateCodecCombo;
     procedure UpdateSizeinMB;
-    procedure InsertVideo;
+    procedure InsertVideo(UpdateProc: TVideoProgressEvent);
     { Private declarations }
   public
     { Public declarations }
     VideoAspect: double;
     TheProgressbar: TProgressBar;
     procedure UpdateVideo(Videotime: int64);
+    procedure UpdateVideoThreaded(Videotime: int64);
   end;
 
   // Example for a new TCodecSetupClass
@@ -111,7 +111,8 @@ implementation
 
 {$R *.dfm}
 
-uses mmSystem, System.Types, math, UTools, Winapi.ShlObj, Winapi.ActiveX, System.Threading;
+uses mmSystem, System.Types, math, UTools, Winapi.ShlObj, Winapi.ActiveX,
+  System.Threading;
 
 const
   Aspects: array [0 .. 2] of double = (16 / 9, 4 / 3, 3 / 2);
@@ -352,9 +353,6 @@ end;
 
 procedure TForm1.Button7Click(Sender: TObject);
 var
-  bm: TBitmap;
-  bme: TBitmapEncoder;
-  w, h: integer;
   P: TVideoProps;
 begin
   if not OVD.Execute then
@@ -380,32 +378,33 @@ begin
 end;
 
 procedure TForm1.Button8Click(Sender: TObject);
+var
+  UpdateProc: TVideoProgressEvent;
+  aTask: iTask;
 begin
   Label12.Caption := 'Working';
   Label12.Repaint;
   ProgressBar2.Max := GetVideoTime(fVideoFile);
   ProgressBar2.Position := 0;
   TheProgressbar := ProgressBar2;
-  InsertVideo;
-end;
-
-procedure TForm1.Button9Click(Sender: TObject);
-var aTask: iTask;
-begin
-  Label12.Caption := 'Working';
-  Label12.Repaint;
-  ProgressBar2.Max := GetVideoTime(fVideofile);
-  ProgressBar2.Position := 0;
-  TheProgressbar := ProgressBar2;
-  aTask:=TTask.Create(
-  procedure
+  if Sender = Button8 then
   begin
-    InsertVideo;
-  end);
-  aTask.Start;
+    UpdateProc := UpdateVideo;
+    InsertVideo(UpdateProc);
+  end
+  else
+  begin
+    UpdateProc := UpdateVideoThreaded;
+    aTask := TTask.Create(
+      procedure
+      begin
+        InsertVideo(UpdateProc);
+      end);
+    aTask.Start;
+  end;
 end;
 
-procedure TForm1.InsertVideo;
+procedure TForm1.InsertVideo(UpdateProc: TVideoProgressEvent);
 var
   bm: TBitmap;
   w, h: integer;
@@ -433,7 +432,7 @@ begin
       TAVCodecID(CodecCombo.Items.Objects[CodecCombo.ItemIndex]), vsBiCubic,
       BgColors[BgCombo.ItemIndex]);
     try
-      bme.OnProgress := UpdateVideo;
+      bme.OnProgress := UpdateProc;
       TextOnBitmap(bm, 'Intro Screen');
       bme.AddStillImage(bm, 5000);
       bme.AddVideo(fVideoFile);
@@ -537,6 +536,12 @@ begin
 end;
 
 procedure TForm1.UpdateVideo(Videotime: int64);
+begin
+  TheProgressbar.Position := Videotime;
+  TheProgressbar.Update;
+end;
+
+procedure TForm1.UpdateVideoThreaded(Videotime: int64);
 begin
   TThread.Synchronize(TThread.Current,
     procedure

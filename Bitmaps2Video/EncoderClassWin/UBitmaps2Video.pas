@@ -284,15 +284,15 @@ begin
     ah := bm.Height; // suppress compiler warning
     case ZoomOption of
       zoAAx2:
-        ah := 2 * 1080; // 2* my screen.height  better setting?
+        ah := 2 * fHeight;
       zoAAx4:
-        ah := 4 * 1080;
+        ah := 4 * fHeight;
       zoAAx6:
-        ah := 6 * 1080;
+        ah := 6 * fHeight;
       // 6*screen.height might give an EOutOfResources if there is no
       // suffiently large memory block available, less likely under Win64
       zoResample:
-        ah := bm.Height + 100;
+        ah := fHeight + 100;
     end;
     asp := bw / bh;
     aw := round(ah * asp);
@@ -308,8 +308,7 @@ begin
     cm := TBitmap.Create;
     try
       cm.PixelFormat := pf32bit;
-      cm.SetSize(bw, bh);
-      cm.PixelFormat := pf32bit;
+      cm.SetSize(round(fHeight*bw/bh), fHeight);
       while elapsed < targetTime do
       begin
         t := elapsed / EffectTime;
@@ -318,8 +317,8 @@ begin
           zoAAx2, zoAAx4, zoAAx6:
             ZoomDeleteScansTripleOnly(am, cm, mid);
           zoResample:
-            ZoomResampleTripleOnly(am, cm, mid, 1.6);
-          // radius 1.6 is good enough
+            ZoomResampleTripleOnly(am, cm, mid, 1.5);
+          // radius 1.5 is good enough
         end;
         // feed cm to the encoder
         AddFrame(cm);

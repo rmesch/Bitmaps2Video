@@ -6,7 +6,8 @@ uses
   FFMPEG,
   FMX.Graphics,
   System.types,
-  UFormatsM;
+  UFormatsM,
+  math;
 
 type
   TVideoProps = record
@@ -16,6 +17,21 @@ type
     VideoCodec, AudioCodec: TAVCodecID;
     Duration: int64;
   end;
+
+  TEnvelopeFunction = function(t: double): double;
+  TZoomSpeedEnvelope = (zeSlowSlow, zeFastSlow, zeSlowFast, zeLinear,
+    zeExperiment);
+
+  ///<summary> (lScale,tScale): LeftTop as fractions of (Width,Height). sScale: Size as Fraction of Width/Height </summary>
+  TZoom=record
+    lScale, tScale, sScale: double;
+    function ToRect(Width,Height: integer): TRectF; inline;
+  end;
+
+
+  function RectToZoom(r: TRectF; Width,Height: integer): TZoom; inline;
+  function MakeZoom(l,t,s: double): TZoom; inline;
+
 
 procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;
   fmt_ctx: PAVFormatContext; type_: TAVMediaType);
@@ -28,8 +44,36 @@ function GetVideoProps(const Videofile: string): TVideoProps;
 procedure GrabFrame(const bm: TBitmap; const Videofile: string;
   FrameNumber: integer);
 
-procedure ExpandToAspectRatio(const bm: TBitmap; aFrame: PAVFrame;
-  AR: TAVRational; Background: byte);
+// TRectF utility functions
+
+/// <summary> Compute an in between rect of SourceR and TargetR </summary>
+/// <param name="SourceR"> TRectF </param>
+/// <param name="TargetR"> TRectF </param>
+/// <param name="t"> Double between 0 and 1. Weight Source is t, weight Target is 1-t </param>
+function Interpolate(SourceR, TargetR: TRectF; t: double): TRectF; inline;
+
+/// <summary> Scale a TRectF by a factor </summary>
+/// <param name="SourceR"> TRectF </param>
+/// <param name="fact"> Scaling factor (e.g. 2 doubles the size) </param>
+function ScaleRect(SourceR: TRectF; fact: double): TRectF; inline;
+
+/// <summary> Center aRect in BigR </summary>
+/// <param name="aRect"> (TRectF) Input rect to modify </param>
+/// <param name="BigR"> (TRectF) Rect to center aRect in </param>
+procedure CenterRect(var aRect: TRectF; BigR: TRectF);
+inline
+
+// Zoom-Pan speed modifiers
+function SlowSlow(t: double): double; inline;
+function SlowFast(t: double): double; inline;
+function FastSlow(t: double): double; inline;
+function Linear(t: double): double; inline;
+function Experiment(t: double): double; inline;
+
+const
+  EnvelopeFunction: array [TZoomSpeedEnvelope] of TEnvelopeFunction = (SlowSlow,
+    FastSlow, SlowFast, Linear, Experiment);
+
 
 Procedure ExpandSizeToAspect(Width,Height: integer; AR: TAVRational; var NewWidth,NewHeight: integer);
 
@@ -37,6 +81,79 @@ implementation
 
 uses
   System.SysUtils;
+
+function Experiment(t: double): double; inline;
+begin
+  result := 0.5 * sin(2 * Pi * t) + t;
+end;
+
+function SlowSlow(t: double): double; inline;
+begin
+  result := 3 * t * t - 2 * t * t * t;
+end;
+
+function SlowFast(t: double): double; inline;
+begin
+  result := t * t;
+end;
+
+function FastSlow(t: double): double; inline;
+begin
+  result := 2 * t - t * t;
+end;
+
+function Linear(t: double): double; inline;
+begin
+  result := t;
+end;
+
+ function TZoom.ToRect(Width, Height: integer): TRectF;
+ begin
+   Assert((tScale+sScale<=1) and (lScale+sScale<=1),'Zoom would be outside of picture bounds');
+   Result.Left:=lScale*Width;
+   Result.Top:=tScale*Height;
+   Result.Right:=Result.Left+sScale*Width;
+   Result.Bottom:=Result.Top+sScale*Height;
+ end;
+
+  function RectToZoom(r: TRectF; Width,Height: integer): TZoom; inline;
+  begin
+    //the result only makes sense if r has the same aspect ratio as Width x Height
+    Assert((r.Right-r.Left>0) and (Width>0) and (Height>0));
+    Result.sScale:=(r.Right-r.Left)/Width;
+    Result.lScale:=r.Left/Width;
+    Result.tScale:=r.Top/Height;
+  end;
+
+  function MakeZoom(l,t,s: double): TZoom; inline;
+  begin
+    Result.lScale:=l;
+    Result.tScale:=t;
+    Result.sScale:=s;
+  end;
+
+function Interpolate(SourceR, TargetR: TRectF; t: double): TRectF;
+begin
+  result.Left := SourceR.Left + t * (TargetR.Left - SourceR.Left);
+  result.Top := SourceR.Top + t * (TargetR.Top - SourceR.Top);
+  result.Right := SourceR.Right + t * (TargetR.Right - SourceR.Right);
+  result.Bottom := SourceR.Bottom + t * (TargetR.Bottom - SourceR.Bottom);
+end;
+
+function ScaleRect(SourceR: TRectF; fact: double): TRectF;
+begin
+  result.Left := fact * SourceR.Left;
+  result.Top := fact * SourceR.Top;
+  result.Right := fact * SourceR.Right;
+  result.Bottom := fact * SourceR.Bottom;
+end;
+
+procedure CenterRect(var aRect: TRectF; BigR: TRectF);
+begin
+  offsetRect(aRect, BigR.Left - aRect.Left, BigR.Top - aRect.Top);
+  offsetRect(aRect, 0.5 * (BigR.Right - BigR.Left - aRect.Right + aRect.Left),
+    0.5 * (BigR.Bottom - BigR.Top - aRect.Bottom + aRect.Top));
+end;
 
 function GetVideoProps(const Videofile: string): TVideoProps;
 var
@@ -277,63 +394,7 @@ begin
   end;
 end;
 
-procedure ExpandToAspectRatio(const bm: TBitmap; aFrame: PAVFrame;
-  AR: TAVRational; Background: byte);
-var
-  xstart, ystart: integer;
-  pix_fmt: TAVPixelFormat;
-  ret: integer;
-  BitmapData: TBitmapData;
-  bmRow, FrameRow, FrameStart: PByte;
-  y: integer;
-begin
-  assert((bm.Width > 0) and (bm.Height > 0));
-  if bm.Width / bm.Height < AR.num / AR.den then
-  // Add background right and left
-  begin
-    aFrame.Height := bm.Height;
-    aFrame.Width := round(bm.Height / AR.den * AR.num);
-    xstart := (aFrame.Width - bm.Width) div 2;
-    ystart := 0;
-  end
-  else
-  begin
-    aFrame.Width := bm.Width;
-    aFrame.Height := round(bm.Width / AR.num * AR.den);
-    xstart := 0;
-    ystart := (aFrame.Height - bm.Height) div 2;
-  end;
-  // Set up the Frame with the right pixelformat
-{$IFDEF ANDROID}
-  pix_fmt := AV_PIX_FMT_RGBA;
-{$ELSE}
-  pix_fmt := AV_PIX_FMT_BGRA;
-{$ENDIF}
-  aFrame.format := Ord(pix_fmt);
-  ret := av_frame_get_buffer(aFrame, 0);
-  assert(ret >= 0);
-  av_frame_make_writable(aFrame);
-  // Fill the frame with gray 0:black 255:white
-  FillChar(aFrame.data[0]^, aFrame.Height * aFrame.linesize[0], Background);
 
-  // Copy bm to aFrame
-  assert(bm.Map(TMapAccess.Read, BitmapData));
-  try
-    bmRow := BitmapData.GetScanline(0);
-    FrameRow := aFrame.data[0];
-    inc(FrameRow, ystart * aFrame.linesize[0]);
-    for y := 0 to bm.Height - 1 do
-    begin
-      FrameStart := FrameRow;
-      inc(FrameStart, 4 * xstart);
-      Move(bmRow^, FrameStart^, BitmapData.BytesPerLine);
-      inc(bmRow, BitmapData.Pitch);
-      inc(FrameRow, aFrame.linesize[0]);
-    end;
-  finally
-    bm.Unmap(BitmapData);
-  end;
-end;
 
 Procedure ExpandSizeToAspect(Width,Height: integer; AR: TAVRational; var NewWidth,NewHeight: integer);
 begin
@@ -349,6 +410,8 @@ begin
       NewHeight := round(Width * AR.den / AR.num);
     end;
 end;
+
+
 
 
 

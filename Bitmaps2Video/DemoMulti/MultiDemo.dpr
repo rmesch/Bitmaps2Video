@@ -7,7 +7,11 @@ uses
   FFMPEG in '..\FFMPeg\Source\FFMPEG.pas',
   UBitmaps2VideoM in '..\EncoderClassMulti\UBitmaps2VideoM.pas',
   UFormatsM in '..\EncoderClassMulti\UFormatsM.pas',
-  UToolsM in '..\EncoderClassMulti\UToolsM.pas';
+  UToolsM in '..\EncoderClassMulti\UToolsM.pas'
+  {$IFDEF ANDROID}
+  ,
+  UAndroidTools in 'UAndroidTools.pas'
+  {$ENDIF};
 
 {$R *.res}
 

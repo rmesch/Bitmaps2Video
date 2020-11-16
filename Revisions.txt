@@ -1,3 +1,14 @@
+11-16-2020
+*Encoder class Multi-Platform:
+
+Added functionalities:
+ZoomPan method
+CrossFade method
+See the expanded demo.
+
+The win-version still misses the CrossFade,
+the cross-platform still misses video-deinterlacing.
+
 11-05-2020
 *Encoder class Win:
 

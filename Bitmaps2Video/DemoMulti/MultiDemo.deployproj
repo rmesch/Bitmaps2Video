@@ -184,6 +184,15 @@
             <RemoteCommand/>
             <Overwrite>True</Overwrite>
         </DeployFile>
+        <DeployFile Include="Android\Debug\provider_paths.xml" Condition="'$(Config)'=='Debug'">
+            <RemoteDir>MultiDemo\res\xml\</RemoteDir>
+            <RemoteName>provider_paths.xml</RemoteName>
+            <DeployClass>AndroidFileProvider</DeployClass>
+            <Operation>1</Operation>
+            <LocalCommand/>
+            <RemoteCommand/>
+            <Overwrite>True</Overwrite>
+        </DeployFile>
         <DeployFile Include="..\FFMPeg\BinaryLibrary\Android-armeabi-v7\libavdevice.so" Condition="'$(Config)'=='Debug'">
             <RemoteDir>MultiDemo\library\lib\armeabi-v7a\</RemoteDir>
             <RemoteName>libavdevice.so</RemoteName>

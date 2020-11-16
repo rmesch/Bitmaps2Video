@@ -18,7 +18,6 @@
         android:theme="%theme%"
         android:hardwareAccelerated="%hardwareAccelerated%"
         android:resizeableActivity="false">
-
         <%provider%>
         <%application-meta-data%>
         <%uses-libraries%>

@@ -10,7 +10,7 @@ There are 2 versions of the encoder class:
     TBitmapEncoder for platforms Win32 and Win64,
       relatively stable with H264, Mpeg-4, Mjpeg, Mpeg1/2 encoders and .avi, .mp4 containers.
  
-    TBitmapEncoderM for cross platform with less features and less tested.
+    TBitmapEncoderM for cross platform, a little less tested.
       Demo currently working with Win32, Win64, Android, Android64 thanks to TurboMagic.
       Recently more features translated from Win-version, more thoroughly tested under
       Android32, better demo.
@@ -31,7 +31,7 @@ The added constructor CreateFromVideo (Win version) has some problems.
 Cross-platform version:
 
 The H264-encoder does not work under Android (at least not Android32).
-The use of TBitmap in threads needs to be more stable. Delphi claims thread-safety of TBitmap, but this does not seem to be the case. Some workarounds are in place, but more insight is needed. 
+The use of TBitmap in threads has become more stable, but there might be issues remaining. Delphi claims thread-safety of TBitmap, but this does not seem to be the case, particularly under Android. Some workarounds are in place, pixel-operations are now mostly performed on the video-frames, which seem to be more thread-safe. 
 
 **Ideas, reports, fixes most welcome.***
 

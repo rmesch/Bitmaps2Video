@@ -2,7 +2,7 @@ object Form1: TForm1
   Left = 0
   Top = 0
   Caption = 'Form1'
-  ClientHeight = 681
+  ClientHeight = 682
   ClientWidth = 1078
   FormFactor.Width = 320
   FormFactor.Height = 480
@@ -13,7 +13,7 @@ object Form1: TForm1
   object TBC: TTabControl
     Align = Client
     Size.Width = 1078.000000000000000000
-    Size.Height = 470.000000000000000000
+    Size.Height = 471.000000000000000000
     Size.PlatformDefault = False
     TabHeight = 49.000000000000000000
     TabIndex = 0
@@ -21,26 +21,28 @@ object Form1: TForm1
     TabPosition = Top
     Sizes = (
       1078s
-      421s
+      422s
       1078s
-      421s)
+      422s
+      1078s
+      422s)
     object TabSimple: TTabItem
       CustomIcon = <
         item
         end>
       IsSelected = True
-      Size.Width = 539.000000000000000000
+      Size.Width = 359.000000000000000000
       Size.Height = 49.000000000000000000
       Size.PlatformDefault = False
       StyleLookup = ''
       TabOrder = 0
-      Text = 'Simple Movies'
+      Text = 'Movies from images or colors'
       ExplicitSize.cx = 407.000000000000000000
       ExplicitSize.cy = 49.000000000000000000
       object PanelSimple: TPanel
         Align = Client
         Size.Width = 1078.000000000000000000
-        Size.Height = 421.000000000000000000
+        Size.Height = 422.000000000000000000
         Size.PlatformDefault = False
         TabOrder = 13
         object SlideshowPic1: TImageControl
@@ -22831,6 +22833,7 @@ object Form1: TForm1
           Size.Height = 159.000000000000000000
           Size.PlatformDefault = False
           TabOrder = 7
+          OnClick = SlideshowPic1Click
         end
         object SlideshowPic2: TImageControl
           Bitmap.PNG = {
@@ -53744,12 +53747,13 @@ object Form1: TForm1
           Size.Height = 159.000000000000000000
           Size.PlatformDefault = False
           TabOrder = 6
+          OnClick = SlideshowPic1Click
         end
         object Button1: TButton
           Position.X = 42.000000000000000000
-          Position.Y = 72.000000000000000000
+          Position.Y = 118.000000000000000000
           Size.Width = 273.000000000000000000
-          Size.Height = 31.000000000000000000
+          Size.Height = 77.000000000000000000
           Size.PlatformDefault = False
           TabOrder = 0
           Text = 'Make a Color Movie'
@@ -53757,9 +53761,9 @@ object Form1: TForm1
         end
         object Button2: TButton
           Position.X = 42.000000000000000000
-          Position.Y = 30.000000000000000000
+          Position.Y = 32.000000000000000000
           Size.Width = 273.000000000000000000
-          Size.Height = 31.000000000000000000
+          Size.Height = 77.000000000000000000
           Size.PlatformDefault = False
           TabOrder = 5
           Text = 'Make a Simple Slideshow'
@@ -53768,9 +53772,9 @@ object Form1: TForm1
         object ProgressBar1: TProgressBar
           Max = 18.000000000000000000
           Orientation = Horizontal
-          Position.X = 44.000000000000000000
-          Position.Y = 131.000000000000000000
-          Size.Width = 315.000000000000000000
+          Position.X = 424.000000000000000000
+          Position.Y = 306.000000000000000000
+          Size.Width = 461.000000000000000000
           Size.Height = 10.000000000000000000
           Size.PlatformDefault = False
         end
@@ -53780,28 +53784,77 @@ object Form1: TForm1
           Margins.Left = 10.000000000000000000
           Margins.Right = 10.000000000000000000
           Position.X = 10.000000000000000000
-          Position.Y = 328.000000000000000000
+          Position.Y = 329.000000000000000000
           Size.Width = 1058.000000000000000000
           Size.Height = 93.000000000000000000
           Size.PlatformDefault = False
           TextSettings.FontColor = xFF046311
           Text = 
             'Choose a name for the output video file and click one of the but' +
-            'tons to make a simple movie. This is a demo for the methods AddF' +
-            'rame, AddStillimage, AddColorFrame and Freeze of TBitmapEncoderM' +
-            '.'
+            'tons to make a movie. This is a demo for the methods AddFrame, A' +
+            'ddStillimage, AddColorFrame, Freeze, CrossFade and ZoomPan of TB' +
+            'itmapEncoderM.'
           TabOrder = 9
         end
         object Label16: TLabel
-          Position.X = 424.000000000000000000
-          Position.Y = 198.000000000000000000
+          Position.X = 426.000000000000000000
+          Position.Y = 200.000000000000000000
           Size.Width = 463.000000000000000000
           Size.Height = 51.000000000000000000
           Size.PlatformDefault = False
-          Text = 
-            'Under Windows you can load different pictures by clicking on the' +
-            ' images.'
+          Text = 'You can load different pictures by clicking on the images.'
           TabOrder = 10
+        end
+        object Button7: TButton
+          Position.X = 42.000000000000000000
+          Position.Y = 204.000000000000000000
+          Size.Width = 273.000000000000000000
+          Size.Height = 77.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 11
+          Text = 'Zoom into Pictures'
+          OnClick = Button7Click
+        end
+        object Label20: TLabel
+          Position.X = 46.000000000000000000
+          Position.Y = 288.000000000000000000
+          Size.Width = 111.000000000000000000
+          Size.Height = 23.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Zoom-Algo:'
+          TabOrder = 12
+        end
+        object ZoomOptionCombo: TComboBox
+          Items.Strings = (
+            'Antialias x2'
+            'Antialias x4'
+            'Antialias x6'
+            '"Bicubic" Resample')
+          ItemIndex = 1
+          Position.X = 172.000000000000000000
+          Position.Y = 288.000000000000000000
+          Size.Width = 221.000000000000000000
+          Size.Height = 32.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 13
+        end
+        object Label21: TLabel
+          Position.X = 426.000000000000000000
+          Position.Y = 270.000000000000000000
+          Size.Width = 213.000000000000000000
+          Size.Height = 23.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Encoding progress:'
+          TabOrder = 14
+        end
+        object Label22: TLabel
+          Position.X = 428.000000000000000000
+          Position.Y = 328.000000000000000000
+          Size.Width = 469.000000000000000000
+          Size.Height = 23.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Label22'
+          TabOrder = 15
         end
       end
     end
@@ -53810,7 +53863,7 @@ object Form1: TForm1
         item
         end>
       IsSelected = False
-      Size.Width = 539.000000000000000000
+      Size.Width = 359.000000000000000000
       Size.Height = 49.000000000000000000
       Size.PlatformDefault = False
       StyleLookup = ''
@@ -53821,7 +53874,7 @@ object Form1: TForm1
       object PanelInsertVideo: TPanel
         Align = Client
         Size.Width = 1078.000000000000000000
-        Size.Height = 421.000000000000000000
+        Size.Height = 422.000000000000000000
         Size.PlatformDefault = False
         TabOrder = 13
         object ButtonLoadVideo: TButton
@@ -53911,9 +53964,9 @@ object Form1: TForm1
         object Label12: TLabel
           StyledSettings = [Family, Size, Style]
           Position.X = 286.000000000000000000
-          Position.Y = 216.000000000000000000
-          Size.Width = 611.000000000000000000
-          Size.Height = 141.000000000000000000
+          Position.Y = 240.000000000000000000
+          Size.Width = 645.000000000000000000
+          Size.Height = 117.000000000000000000
           Size.PlatformDefault = False
           TextSettings.FontColor = xFF1E500B
           Text = 
@@ -53944,7 +53997,7 @@ object Form1: TForm1
           TabOrder = 27
         end
         object Button3: TButton
-          Position.X = 942.000000000000000000
+          Position.X = 944.000000000000000000
           Position.Y = 12.000000000000000000
           Size.Width = 129.000000000000000000
           Size.Height = 97.000000000000000000
@@ -53960,7 +54013,7 @@ object Form1: TForm1
           Margins.Left = 10.000000000000000000
           Margins.Right = 10.000000000000000000
           Position.X = 10.000000000000000000
-          Position.Y = 352.000000000000000000
+          Position.Y = 353.000000000000000000
           Size.Width = 1058.000000000000000000
           Size.Height = 69.000000000000000000
           Size.PlatformDefault = False
@@ -53984,6 +54037,73 @@ object Form1: TForm1
           TextSettings.WordWrap = True
           OnClick = Button3Click
         end
+        object Label23: TLabel
+          Position.X = 588.000000000000000000
+          Position.Y = 206.000000000000000000
+          Size.Width = 337.000000000000000000
+          Size.Height = 23.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Label23'
+          TabOrder = 32
+        end
+      end
+    end
+    object TabItem1: TTabItem
+      CustomIcon = <
+        item
+        end>
+      IsSelected = False
+      Size.Width = 360.000000000000000000
+      Size.Height = 49.000000000000000000
+      Size.PlatformDefault = False
+      StyleLookup = ''
+      TabOrder = 0
+      Text = 'Add audio stream'
+      ExplicitSize.cx = 360.000000000000000000
+      ExplicitSize.cy = 49.000000000000000000
+      object Button5: TButton
+        Position.X = 24.000000000000000000
+        Position.Y = 51.000000000000000000
+        Size.Width = 367.000000000000000000
+        Size.Height = 49.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        Text = 'Add an audio stream to the output file'
+        OnClick = Button5Click
+      end
+      object Label18: TLabel
+        Position.X = 30.000000000000000000
+        Position.Y = 111.000000000000000000
+        Size.Width = 639.000000000000000000
+        Size.Height = 88.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Label18'
+        TabOrder = 1
+      end
+      object Label19: TLabel
+        Align = Bottom
+        StyledSettings = [Family, Size, Style]
+        Padding.Left = 10.000000000000000000
+        Padding.Right = 10.000000000000000000
+        Margins.Left = 10.000000000000000000
+        Margins.Right = 10.000000000000000000
+        Position.X = 10.000000000000000000
+        Position.Y = 291.000000000000000000
+        Size.Width = 1058.000000000000000000
+        Size.Height = 131.000000000000000000
+        Size.PlatformDefault = False
+        TextSettings.FontColor = claDarkgreen
+        Text = 
+          'Demo for the utiliy procedure MuxStreams2. An audio file is adde' +
+          'd as an audio stream to the output file video, which must have b' +
+          'een created. Streams are just copied, no reencoding happens. Loa' +
+          'd an audio file from your hard disk, the audio will be clipped t' +
+          'o the video duration. Not all audio formats are compatible with ' +
+          'all file formats. On a mismatch you get an exception. Also, some' +
+          ' players might not be able to play the result, even if the file ' +
+          'has been written successfully. Usually .mp3 files don'#39't pose pro' +
+          'blems.'
+        TabOrder = 2
       end
     end
   end
@@ -54172,6 +54292,25 @@ object Form1: TForm1
       Size.PlatformDefault = False
       TabOrder = 28
     end
+    object Button6: TButton
+      Position.X = 798.000000000000000000
+      Position.Y = 144.000000000000000000
+      Size.Width = 131.000000000000000000
+      Size.Height = 59.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 29
+      Text = 'Play the video'
+      OnClick = Button6Click
+    end
+    object Label24: TLabel
+      Position.X = 800.000000000000000000
+      Position.Y = 84.000000000000000000
+      Size.Width = 273.000000000000000000
+      Size.Height = 59.000000000000000000
+      Size.PlatformDefault = False
+      Text = 'Don'#39't push this button before the video writing has finished :)'
+      TabOrder = 31
+    end
   end
   object OD: TOpenDialog
     Filter = 
@@ -54179,5 +54318,10 @@ object Form1: TForm1
       '.*'
     Left = 354
     Top = 276
+  end
+  object OAD: TOpenDialog
+    Filter = 'Audio Files|*.mp3;*.wav;*.wma;*.ogg|Any File|*.*'
+    Left = 388
+    Top = 277
   end
 end

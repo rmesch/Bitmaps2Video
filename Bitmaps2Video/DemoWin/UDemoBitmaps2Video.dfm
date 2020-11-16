@@ -173,7 +173,6 @@ object Form1: TForm1
     TabOrder = 8
     object TabSheet1: TTabSheet
       Caption = 'Zooming'
-      ExplicitHeight = 197
       object Image1: TImage
         Left = 9
         Top = 10
@@ -266,7 +265,6 @@ object Form1: TForm1
     object TabSheet2: TTabSheet
       Caption = 'Inserting an existing video'
       ImageIndex = 1
-      ExplicitTop = 26
       object Label11: TLabel
         Left = 0
         Top = 188
@@ -369,7 +367,7 @@ object Form1: TForm1
       end
       object Button8: TButton
         Left = 277
-        Top = 128
+        Top = 130
         Width = 143
         Height = 25
         Caption = 'Insert Clip (main thread)'
@@ -383,13 +381,12 @@ object Form1: TForm1
         Height = 25
         Caption = 'Insert Clip (background thread)'
         TabOrder = 6
-        OnClick = Button9Click
+        OnClick = Button8Click
       end
     end
     object TabSheet3: TTabSheet
       Caption = 'Create from Video'
       ImageIndex = 2
-      ExplicitHeight = 197
       DesignSize = (
         601
         261)
@@ -479,7 +476,6 @@ object Form1: TForm1
     object TabSheet4: TTabSheet
       Caption = 'Add Audio'
       ImageIndex = 3
-      ExplicitHeight = 197
       object Label5: TLabel
         Left = 20
         Top = 59

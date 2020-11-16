@@ -12,11 +12,7 @@ uses
   System.Permissions,
   Androidapi.Jni.Os,
   Androidapi.Helpers,
-  Androidapi.Jni.GraphicsContentViewText,
-  Androidapi.Jni.Net,
-  FMX.Platform.Android,
-  Androidapi.JNIBridge,
-  Androidapi.Jni.JavaTypes,
+  UAndroidTools,
 {$ENDIF}
   FMX.SpinBox, FMX.TabControl, FMX.MediaLibrary, FMX.Platform,
   System.Messaging, FMX.ScrollBox, FMX.Memo, FFMPEG;
@@ -71,6 +67,19 @@ type
     Label17: TLabel;
     BgCombo: TComboBox;
     Button4: TButton;
+    TabItem1: TTabItem;
+    Button5: TButton;
+    Label18: TLabel;
+    OAD: TOpenDialog;
+    Label19: TLabel;
+    Button6: TButton;
+    Button7: TButton;
+    Label20: TLabel;
+    ZoomOptionCombo: TComboBox;
+    Label21: TLabel;
+    Label22: TLabel;
+    Label23: TLabel;
+    Label24: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure FormatComboChange(Sender: TObject);
@@ -78,13 +87,16 @@ type
     procedure FormShow(Sender: TObject);
     procedure SpinBoxFrameNoChange(Sender: TObject);
     procedure Button3Click(Sender: TObject);
+    procedure Button5Click(Sender: TObject);
+    procedure Button6Click(Sender: TObject);
+    procedure Button7Click(Sender: TObject);
+    procedure SlideshowPic1Click(Sender: TObject);
   private
 {$IFDEF ANDROID}
     FPermissionWriteExtStorage: string;
-    FMessageSubscriptionID: integer;
 {$ENDIF}
     MovieProc: TMovieProc;
-    fVideoFilename, fOutputFile: string;
+    fVideoFilename, fOutputFile, fAudioFilename: string;
     procedure UpdateCodecCombo;
 {$IFDEF ANDROID}
     /// <summary>
@@ -94,15 +106,6 @@ type
     procedure LocationPermissionRequestResult(Sender: TObject;
       const APermissions: TArray<string>;
       const AGrantResults: TArray<TPermissionStatus>);
-    /// <summary>
-    /// This event will be called when the user has picked a video object
-    /// </summary>
-    procedure HandleActivityMessage(const Sender: TObject; const M: TMessage);
-    /// <summary>
-    /// This processes the picked video object and returns a valid file name, or fails, if
-    /// the user did not pick the right viewer (documents folder)
-    /// </summary>
-    function HandleIntentAction(const Data: JIntent): Boolean;
 {$ENDIF}
     procedure BrowseForVideoFile;
     procedure ProcessVideoFile;
@@ -113,6 +116,7 @@ type
     procedure WriteTextOnBitmap(const bm: TBitmap; const text: String;
       ct: Cardinal);
     procedure InsertVideo(NewW, NewH, FrameRate: integer; CodecID: TAVCodecId);
+    procedure AddAudio;
   public
     TheProgressbar: TProgressBar;
     procedure MakeMovie(const filename: string);
@@ -130,7 +134,13 @@ implementation
 uses
   UFormatsM, UBitmaps2VideoM,
   math, IOUtils, System.Threading, FMX.DialogService,
-  UToolsM, System.UIConsts;
+  UToolsM, System.UIConsts, System.Diagnostics, System.Timespan
+{$IFDEF Android}
+    , Posix.Unistd, Androidapi.Jni.JavaTypes
+{$ENDIF}
+{$IFDEF MSWINDOWS}
+    , winapi.shellapi
+{$ENDIF};
 
 const
   MovieHeights: array [0 .. 2] of integer = (720, 540, 1080);
@@ -144,12 +154,13 @@ begin
   else
     MovieProc := MakeSlideshow;
 {$IFDEF ANDROID}
-  MovieProc(TPath.Combine(TPath.GetSharedDownloadsPath,
-    Edit1.text + FormatCombo.Items[FormatCombo.ItemIndex]));
+  fOutputFile := TPath.Combine(TPath.GetSharedDownloadsPath,
+    Edit1.text + FormatCombo.Items[FormatCombo.ItemIndex]);
 {$ELSE}
-  MovieProc(TPath.Combine(TPath.GetMoviesPath, Edit1.text + FormatCombo.Items
-    [FormatCombo.ItemIndex]));
+  fOutputFile := TPath.Combine(TPath.GetMoviesPath,
+    Edit1.text + FormatCombo.Items[FormatCombo.ItemIndex]);
 {$ENDIF}
+  MovieProc(fOutputFile);
 end;
 
 procedure TForm1.MakeTextBitmap(const bm: TBitmap; const text: String;
@@ -158,7 +169,7 @@ var
   am: TBitmap;
 begin
   // Run this in the main thread
-  TThread.Synchronize(TThread.Current,
+  TThread.Synchronize(nil,
     procedure
     begin
       // Use the canvas of a temporary bitmap
@@ -185,7 +196,7 @@ ct: Cardinal);
 var
   am: TBitmap;
 begin
-  TThread.Synchronize(TThread.Current,
+  TThread.Synchronize(nil,
     procedure
     begin
       am := TBitmap.Create;
@@ -252,12 +263,179 @@ begin
     InsertVideo(NewW, NewH, FrameRate, CodecID);
 end;
 
+procedure TForm1.Button5Click(Sender: TObject);
+begin
+  If not FileExists(fOutputFile) then
+  begin
+    TDialogService.ShowMessage('Create a video first');
+    Exit;
+  end;
+{$IFDEF ANDROID}
+  TFileBrowser.BrowseForFile(ctAudio,
+    procedure(var filename: string; var success: boolean)
+    begin
+      if success then
+      begin
+        fAudioFilename := filename;
+        AddAudio;
+      end
+      else
+        TDialogService.ShowMessage
+          ('Pick the file by opening Documents, don''t use any of the other apps.');
+    end);
+{$ELSE}
+  if OAD.Execute then
+  begin
+    fAudioFilename := OAD.filename;
+    AddAudio;
+  end;
+{$ENDIF}
+end;
+
+procedure TForm1.Button6Click(Sender: TObject);
+begin
+  if not FileExists(fOutputFile) then
+  begin
+    TDialogService.ShowMessage('Make a video first');
+    Exit;
+  end;
+{$IFDEF ANDROID}
+  PlayVideo(fOutputFile);
+{$ELSE}
+  ShellExecute(0, 'Open', PChar(fOutputFile), nil, nil, 1);
+{$ENDIF}
+end;
+
+procedure TForm1.Button7Click(Sender: TObject);
+var
+  bm: TBitmap;
+  bme: TBitmapEncoderM;
+  h, w, bw, bh: integer;
+  ZoomTarget, ZoomSource, ZoomTarget2: TZoom;
+  ZoomOption: TZoomOption;
+  VideoAspect: double;
+  CodecID: TAVCodecId;
+  FrameRate: integer;
+  aTask: TThread;
+  Stopwatch: TStopwatch;
+begin
+  aTask := TThread.CreateAnonymousThread(
+    procedure
+    begin
+      Stopwatch := TStopwatch.StartNew;
+      VideoAspect := AspectRatios[AspectCombo.ItemIndex];
+      bm := TBitmap.Create;
+      try
+        bm.Assign(SlideshowPic1.Bitmap);
+        bw := bm.Width;
+        bh := bm.Height;
+        h := StrToInt(HeightCombo.Items[HeightCombo.ItemIndex]);
+        w := Round(h * VideoAspect);
+        if odd(w) then
+          w := w - 1;
+        ZoomSource := MakeZoom(0, 0, 1);
+        // half of original size, offset by left, top which are random in the top-left quarter
+        ZoomTarget2 := MakeZoom(0.5 * random, 0.5 * random, 0.5);
+        // 0.3 times original size, centered
+        ZoomTarget := MakeZoom(0.35, 0.35, 0.3);
+        ZoomOption := zoAAx2; // eliminate compiler warning
+        case ZoomOptionCombo.ItemIndex of
+          0:
+            ZoomOption := zoAAx2;
+          1:
+            ZoomOption := zoAAx4;
+          2:
+            ZoomOption := zoAAx6;
+          3:
+            ZoomOption := zoResample;
+        end;
+
+        CodecID := AV_CODEC_ID_NONE;
+        if CodecCombo.ItemIndex >= 0 then
+          CodecID := TAVCodecId(TCodecIdWrapper(CodecCombo.Items.Objects
+            [CodecCombo.ItemIndex]).CodecID);
+        FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
+{$IFDEF ANDROID}
+        fOutputFile := TPath.Combine(TPath.GetSharedDownloadsPath,
+          Edit1.text + FormatCombo.Items[FormatCombo.ItemIndex]);
+{$ELSE}
+        fOutputFile := TPath.Combine(TPath.GetMoviesPath,
+          Edit1.text + FormatCombo.Items[FormatCombo.ItemIndex]);
+{$ENDIF}
+        bme := TBitmapEncoderM.Create(fOutputFile, w, h, FrameRate,
+          trunc(SpinBox1.Value), CodecID, vsBicubic,
+          BgColors[BgCombo.ItemIndex]);
+
+        try
+          TheProgressbar := ProgressBar1;
+          ProgressBar1.Max := 27;
+          ProgressBar1.Value := 0;
+          bme.OnProgress := ShowProgress;
+          // 28 seconds of movie
+          bme.AddStillImage(bm, 1000);
+
+          bme.ZoomPan(bm, ZoomSource, ZoomTarget, 6000, ZoomOption, zeFastSlow);
+          bme.Freeze(1000);
+          bme.ZoomPan(bm, ZoomTarget, ZoomTarget2, 5000, ZoomOption,
+            zeSlowSlow);
+          bme.Freeze(1000);
+          bme.ZoomPan(bm, ZoomTarget2, ZoomTarget, 5000, ZoomOption,
+            zeSlowFast);
+          bme.Freeze(1000);
+          // "transition"
+          bme.ZoomPan(bm, ZoomTarget, MakeZoom(0.4, 0.4, 0.2), 1000, ZoomOption,
+            zeSlowSlow);
+          bm.Assign(SlideshowPic2.Bitmap);
+          bme.ZoomPan(bm, MakeZoom(0.4, 0.4, 0.2), ZoomTarget, 1000,
+            ZoomOption, zeFastSlow);
+          bme.ZoomPan(bm, ZoomTarget, ZoomSource, 5000, ZoomOption,
+            zeSlowSlow);
+          bme.Freeze(1000);
+          bme.CloseFile; // movie should be done
+          TThread.Synchronize(TThread.Current,
+            procedure
+            begin
+              Label22.text := 'Writing speed: ' + FloatToStrF(bme.FrameCount /
+                Stopwatch.Elapsed.Seconds, ffFixed, 6, 2) + ' fps';
+            end);
+        finally
+          bme.Free;
+        end;
+      finally
+        bm.Free;
+      end;
+
+    end);
+  aTask.Start;
+end;
+
+procedure TForm1.AddAudio;
+var
+  Temp: string;
+begin
+  Temp := TPath.Combine(TPath.GetTempPath, 'TempVideo' + FormatCombo.Items
+    [FormatCombo.ItemIndex]);
+  TFile.Copy(fOutputFile, Temp, True);
+  try
+    MuxStreams2(Temp, fAudioFilename, fOutputFile);
+    Label18.text := Edit1.text + ' now contains ' + fAudioFilename +
+      ' as audio stream';
+  except
+    TFile.Copy(Temp, fOutputFile, True);
+    Label18.text :=
+      'The formats are not compatible, try another video format or another audio file.'
+  end;
+  DeleteFile(Temp);
+end;
+
 procedure TForm1.InsertVideo(NewW, NewH, FrameRate: integer;
 CodecID: TAVCodecId);
 var
   bme: TBitmapEncoderM;
-  bm: TBitmap;
+  am, bm: TBitmap;
+  Stopwatch: TStopwatch;
 begin
+  Stopwatch := TStopwatch.StartNew;
   bme := TBitmapEncoderM.Create(fOutputFile, NewW, NewH, FrameRate,
     trunc(SpinBox1.Value), CodecID, vsBicubic, BgColors[BgCombo.ItemIndex]);
   bme.OnProgress := ShowProgress;
@@ -265,8 +443,15 @@ begin
     bm := TBitmap.Create;
     try
       GrabFrame(bm, fVideoFilename, 1);
-      WriteTextOnBitmap(bm, ' '#13'THE START', claDarkRed);
-      bme.AddStillImage(bm, 3000);
+      am := TBitmap.Create;
+      try
+        am.Assign(bm);
+        WriteTextOnBitmap(bm, ' '#13'THE START', claDarkRed);
+        bme.AddStillImage(bm, 3000);
+        bme.CrossFade(bm, am, 1000);
+      finally
+        am.Free;
+      end;
     finally
       bm.Free;
     end;
@@ -275,7 +460,23 @@ begin
     try
       bm.SetSize(NewW, NewH);
       MakeTextBitmap(bm, 'THE END', claBlack, claYellow);
-      bme.AddStillImage(bm, 3000);
+      am := TBitmap.Create;
+      try
+        GrabFrame(am, fVideoFilename, bme.LastVideoFrameCount - 1);
+        bme.CrossFade(am, bm, 1000);
+      finally
+        am.Free;
+      end;
+      bme.AddStillImage(bm, 1000);
+      bme.ZoomPan(bm, MakeZoom(0, 0, 1), MakeZoom(0.2, 0.2, 0.6), 2000,
+        TZoomOption.zoAAx4, TZoomSpeedEnvelope.zeSlowSlow);
+      bme.Freeze(2000);
+      TThread.Synchronize(TThread.Current,
+        procedure
+        begin
+          Label23.text := 'Writing speed: ' + FloatToStrF(bme.FrameCount /
+            Stopwatch.Elapsed.Seconds, ffFixed, 6, 2) + ' fps';
+        end);
     finally
       bm.Free;
     end;
@@ -326,21 +527,23 @@ begin
 end;
 
 procedure TForm1.BrowseForVideoFile;
-{$IFDEF ANDROID}
-var
-  Intent: JIntent;
-  fName: string;
-{$ENDIF}
 begin
 {$IFDEF ANDROID}
-  // fMessageSubscriptionID: integer is a field of TForm1
-  FMessageSubscriptionID := TMessageManager.DefaultManager.SubscribeToMessage
-    (TMessageResultNotification, HandleActivityMessage);
-  fName := TPath.GetSharedDocumentsPath;
-  Intent := TJIntent.Create;
-  Intent.setType(StringToJString('video/*'));
-  Intent.setAction(TJIntent.JavaClass.ACTION_GET_CONTENT);
-  MainActivity.startActivityForResult(Intent, 0);
+  TFileBrowser.BrowseForFile(ctVideo,
+  // This procedure is called when the user has picked an item
+    procedure(var filename: string; var success: boolean)
+    begin
+      if success then
+      begin
+        fVideoFilename := filename;
+        Edit2.text := fVideoFilename;
+        ProcessVideoFile;
+      end
+      else
+        TDialogService.ShowMessage
+          ('Pick the file by opening the Documents folder. Don''t use any of the other apps.');
+    end);
+
 {$ELSE}
   if OD.Execute then
   begin
@@ -350,67 +553,6 @@ begin
   end;
 {$ENDIF}
 end;
-
-{$IFDEF ANDROID}
-
-// when message is received
-procedure TForm1.HandleActivityMessage(const Sender: TObject;
-const M: TMessage);
-begin
-  if M is TMessageResultNotification then
-    if HandleIntentAction(TMessageReceivedNotification(M).Value) then
-    begin
-      // A valid filename has been returned
-      ProcessVideoFile;
-    end;
-  Edit2.text := fVideoFilename;
-  if fVideoFilename = '' then
-    TDialogService.ShowMessage
-      ('Pick the file by opening the Documents folder. Don''t use any of the other apps.');
-end;
-{$ENDIF}
-{$IFDEF ANDROID}
-
-// This retrieves the file name the user picked, but reliably only if done per
-// opening MyDocuments
-function TForm1.HandleIntentAction(const Data: JIntent): Boolean;
-var
-  P: TJavaObjectArray<Jstring>;
-  // in case you want only specific fields... not used here. I have passed nil to get all the columns.
-  C: JCursor;
-  I: integer;
-begin
-  P := nil;
-  // The following makes no difference
-  // P:=TJavaObjectArray<Jstring>.create(1);
-  // P.Items[0]:=StringToJstring('_data');
-
-  // this is supposed to give the information back to C ( : JCursor)
-  C := MainActivity.getContentResolver.query(Data.getData, nil,
-  // when projection is nil... it returns all columns. Ideally, you should only ask for the columns you need
-  StringToJString(''),
-  // java accepts nil... but you cannot give nil here, you need to give an empty JString
-  nil, StringToJString(''));
-  // java accepts nil... but you cannot give nil here, you need to give an empty JString
-
-  C.moveToFirst;
-  Result := False;
-  for I := 0 to C.getColumnCount - 1 do
-  begin
-    if JStringToString(C.getColumnName(I)) = '_data' then
-    // '_data' column contains the path... you can use this to create the filestream to upload or do whatever....
-    begin
-      // fVideoFilename is a field of the form
-      fVideoFilename := JStringToString(C.getString(I));
-      Result := True;
-      Break;
-    end;
-  end;
-  if not Result then
-    fVideoFilename := '';
-  // P.Free;
-end;
-{$ENDIF}
 
 procedure TForm1.FormatComboChange(Sender: TObject);
 begin
@@ -474,6 +616,7 @@ var
   asp: double;
   aTask: iTask;
 begin
+  ProgressBar1.Max := 18;
   TheProgressbar := ProgressBar1;
   aTask := TTask.Create(
     procedure
@@ -521,46 +664,55 @@ var
   CodecID: TAVCodecId;
   FrameRate: integer;
   aTask: iTask;
-  bm: TBitmap;
+  am, bm: TBitmap;
   I: integer;
   asp: double;
 begin
+  ProgressBar1.Max := 22;
   TheProgressbar := ProgressBar1;
   aTask := TTask.Create(
     procedure
     begin
       bm := TBitmap.Create;
       try
-        Height := MovieHeights[HeightCombo.ItemIndex];
-        asp := AspectRatios[AspectCombo.ItemIndex];
-        Width := Round(Height * asp);
-        if odd(Width) then
-          dec(Width);
-        CodecID := AV_CODEC_ID_NONE;
-        if CodecCombo.ItemIndex >= 0 then
-          CodecID := TAVCodecId(TCodecIdWrapper(CodecCombo.Items.Objects
-            [CodecCombo.ItemIndex]).CodecID);
-        FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
-        bme := TBitmapEncoderM.Create(filename, Width, Height, FrameRate,
-          trunc(SpinBox1.Value), CodecID, vsBicubic,
-          BgColors[BgCombo.ItemIndex]);
+        bm.Assign(SlideshowPic1.Bitmap);
+        am := TBitmap.Create;
         try
-          bme.OnProgress := ShowProgress;
-          // 18 sec of movie
-          I := 1;
-          while I < 4 do
-          begin
-            bm.Assign(SlideshowPic1.Bitmap);
-            bme.AddStillImage(bm, 3000);
-            bm.Assign(SlideshowPic2.Bitmap);
-            bme.AddStillImage(bm, 3000);
-            inc(I);
+          am.Assign(SlideshowPic2.Bitmap);
+          Height := MovieHeights[HeightCombo.ItemIndex];
+          asp := AspectRatios[AspectCombo.ItemIndex];
+          Width := Round(Height * asp);
+          if odd(Width) then
+            dec(Width);
+          CodecID := AV_CODEC_ID_NONE;
+          if CodecCombo.ItemIndex >= 0 then
+            CodecID := TAVCodecId(TCodecIdWrapper(CodecCombo.Items.Objects
+              [CodecCombo.ItemIndex]).CodecID);
+          FrameRate := StrToInt(RateCombo.Items.Strings[RateCombo.ItemIndex]);
+          bme := TBitmapEncoderM.Create(filename, Width, Height, FrameRate,
+            trunc(SpinBox1.Value), CodecID, vsBicubic,
+            BgColors[BgCombo.ItemIndex]);
+          try
+            bme.OnProgress := ShowProgress;
+            // 23 sec of movie
+            I := 1;
+            while I < 4 do
+            begin
+              if I > 1 then
+                bme.CrossFade(am, bm, 1000);
+              bme.AddStillImage(bm, 3000);
+              bme.CrossFade(bm, am, 1000);
+              bme.AddStillImage(am, 3000);
+              inc(I);
+            end;
+            // Hold end frame for 2 seconds
+            bme.Freeze(2000);
+            bme.CloseFile;
+          finally
+            bme.Free;
           end;
-          // Hold end frame for 2 seconds
-          bme.Freeze(2000);
-          bme.CloseFile;
         finally
-          bme.Free;
+          am.Free;
         end;
       finally
         bm.Free;
@@ -571,11 +723,26 @@ end;
 
 procedure TForm1.ShowProgress(Videotime: int64);
 begin
-  TThread.Synchronize(TThread.Current,
+  TThread.Queue(nil,
     procedure
     begin
       TheProgressbar.Value := 0.001 * Videotime;
     end);
+end;
+
+procedure TForm1.SlideshowPic1Click(Sender: TObject);
+begin
+{$IFDEF ANDROID}
+  TFileBrowser.BrowseForFile(ctImages,
+    procedure(var filename: string; var success: boolean)
+    begin
+      if success then
+        TImageControl(Sender).LoadFromFile(filename)
+      else
+        TDialogService.ShowMessage
+          ('Open Documents to load the picture, don''t use any of the other apps.');
+    end);
+{$ENDIF}
 end;
 
 procedure TForm1.SpinBoxFrameNoChange(Sender: TObject);
