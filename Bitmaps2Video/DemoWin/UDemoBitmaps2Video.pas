@@ -165,7 +165,7 @@ var
   h, w, bw, bh: integer;
   t: int64;
   fps: double;
-  ZoomTarget, ZoomSource, ZoomTarget2: TRectF;
+  ZoomTarget, ZoomSource, ZoomTarget2: TZoom;
   ZoomOption: TZoomOption;
 
 begin
@@ -187,11 +187,11 @@ begin
     w := round(h * VideoAspect);
     if odd(w) then
       w := w - 1;
-    ZoomSource := RectF(0, 0, bw, bh);
-    ZoomTarget2 := ScaleRect(ZoomSource, 0.5);
-    OffsetRect(ZoomTarget2, random(bw div 2), random(bh div 2));
-    ZoomTarget := ScaleRect(ZoomSource, 0.3);
-    CenterRect(ZoomTarget, ZoomSource);
+    ZoomSource := MakeZoom(0, 0, 1);
+        // half of original size, offset by left, top which are random in the top-left quarter
+        ZoomTarget2 := MakeZoom(0.5 * random, 0.5 * random, 0.5);
+        // 0.3 times original size, centered
+        ZoomTarget := MakeZoom(0.35, 0.35, 0.3);
     ZoomOption := zoAAx2; // eliminate compiler warning
     case rgrpZoom.ItemIndex of
       0:
@@ -409,7 +409,10 @@ var
   bm: TBitmap;
   w, h: integer;
   bme: TBitmapEncoder;
+  t: int64;
+  f: integer;
 begin
+  t := TimeGetTime;
   VideoAspect := Aspects[RadioGroup1.ItemIndex];
   bm := TBitmap.Create;
   try
@@ -445,6 +448,7 @@ begin
       end;
       TextOnBitmap(bm, 'The End');
       bme.AddStillImage(bm, 5000);
+      f:=bme.FrameCount;
       bme.CloseFile;
     finally
       bme.Free;
@@ -452,10 +456,11 @@ begin
   finally
     bm.Free;
   end;
+  t:=TimeGetTime-t;
   TThread.Synchronize(TThread.Current,
     procedure
     begin
-      Label12.Caption := 'Done';
+      Label12.Caption := 'Writing speed: '#13+FloatToStrF(1000*f/t,ffFixed,6,2)+' fps';
     end);
 end;
 

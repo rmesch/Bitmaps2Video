@@ -80,6 +80,8 @@ type
     Label22: TLabel;
     Label23: TLabel;
     Label24: TLabel;
+    ScrollBox1: TScrollBox;
+    Panel1: TPanel;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure FormatComboChange(Sender: TObject);
@@ -91,6 +93,7 @@ type
     procedure Button6Click(Sender: TObject);
     procedure Button7Click(Sender: TObject);
     procedure SlideshowPic1Click(Sender: TObject);
+    procedure FormResize(Sender: TObject);
   private
 {$IFDEF ANDROID}
     FPermissionWriteExtStorage: string;
@@ -130,6 +133,8 @@ var
 implementation
 
 {$R *.fmx}
+{$R *.SmXhdpiPh.fmx ANDROID}
+{$R *.NmXhdpiPh.fmx ANDROID}
 
 uses
   UFormatsM, UBitmaps2VideoM,
@@ -562,6 +567,14 @@ end;
 procedure TForm1.FormCreate(Sender: TObject);
 begin
   UpdateCodecCombo;
+end;
+
+procedure TForm1.FormResize(Sender: TObject);
+var fact: single;
+begin
+  fact:=max(min(clientwidth/panel1.width,clientheight/panel1.Height),0.7);
+  panel1.Scale.X:=fact;
+  panel1.Scale.Y:=fact;
 end;
 
 procedure TForm1.FormShow(Sender: TObject);

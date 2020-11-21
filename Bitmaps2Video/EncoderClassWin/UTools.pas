@@ -28,6 +28,12 @@ type
     Duration: int64;
   end;
 
+  ///<summary> (lScale,tScale): LeftTop as fractions of (Width,Height). sScale: Size as Fraction of Width/Height </summary>
+  TZoom=record
+    lScale, tScale, sScale: double;
+    function ToRect(Width,Height: integer): TRectF; inline;
+  end;
+
   // All bitmaps should be pf32bit
 
   // Follows: "bicubic" resampler based on ideas by Anders Melander, Mike Lischke
@@ -75,6 +81,10 @@ procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;
 procedure ExpandToAspectRatio(const bm: TBitmap; aFrame: PAVFrame;
   AR: TAVRational; Background: byte);
 
+function RectToZoom(r: TRectF; Width,Height: integer): TZoom; inline;
+
+function MakeZoom(l,t,s: double): TZoom; inline;
+
 // Zoom-Pan speed modifiers
 function SlowSlow(t: double): double; inline;
 function SlowFast(t: double): double; inline;
@@ -95,6 +105,7 @@ type
   TZoomSpeedEnvelope = (zeSlowSlow, zeFastSlow, zeSlowFast, zeLinear,
     zeExperiment);
 
+
 const
   EnvelopeFunction: array [TZoomSpeedEnvelope] of TEnvelopeFunction = (SlowSlow,
     FastSlow, SlowFast, Linear, Experiment);
@@ -102,6 +113,31 @@ const
 implementation
 
 uses math;
+
+function TZoom.ToRect(Width, Height: integer): TRectF;
+ begin
+   Assert((tScale+sScale<=1) and (lScale+sScale<=1),'Zoom would be outside of picture bounds');
+   Result.Left:=lScale*Width;
+   Result.Top:=tScale*Height;
+   Result.Right:=Result.Left+sScale*Width;
+   Result.Bottom:=Result.Top+sScale*Height;
+ end;
+
+  function RectToZoom(r: TRectF; Width,Height: integer): TZoom; inline;
+  begin
+    //the result only makes sense if r has the same aspect ratio as Width x Height
+    Assert((r.Right-r.Left>0) and (Width>0) and (Height>0));
+    Result.sScale:=(r.Right-r.Left)/Width;
+    Result.lScale:=r.Left/Width;
+    Result.tScale:=r.Top/Height;
+  end;
+
+  function MakeZoom(l,t,s: double): TZoom; inline;
+  begin
+    Result.lScale:=l;
+    Result.tScale:=t;
+    Result.sScale:=s;
+  end;
 
 // dec_ctx is allocated and must be freed. stream_idx^ contains the stream index for the type_
 procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;

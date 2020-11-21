@@ -1,0 +1,40 @@
+inherited Form1_SmXhdpiPh: TForm1_SmXhdpiPh
+  ClientHeight = 225
+  ClientWidth = 400
+  DesignerMasterStyle = 3
+  inherited ScrollBox1: TScrollBox
+    Size.Width = 400.000000000000000000
+    Size.Height = 225.000000000000000000
+    Viewport.Width = 395.000000000000000000
+    Viewport.Height = 220.000000000000000000
+    inherited Panel1: TPanel
+      inherited TBC: TTabControl
+        Sizes = (
+          1040s
+          390s
+          1040s
+          390s
+          1040s
+          390s)
+        inherited TabSimple: TTabItem
+          ExplicitSize.cx = 407.000000000000000000
+          ExplicitSize.cy = 49.000000000000000000
+        end
+        inherited TabInsertVideo: TTabItem
+          ExplicitSize.cx = 408.000000000000000000
+          ExplicitSize.cy = 49.000000000000000000
+          inherited PanelInsertVideo: TPanel
+            inherited Memo1: TMemo
+              Viewport.Width = 271.000000000000000000
+              Viewport.Height = 139.000000000000000000
+            end
+          end
+        end
+        inherited TabItem1: TTabItem
+          ExplicitSize.cx = 360.000000000000000000
+          ExplicitSize.cy = 49.000000000000000000
+        end
+      end
+    end
+  end
+end

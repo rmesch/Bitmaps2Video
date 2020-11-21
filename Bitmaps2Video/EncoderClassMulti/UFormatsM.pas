@@ -347,7 +347,7 @@ begin
   inherited;
   // these options only work for H264 and H265
   fpopt:=nil;
-  ret := av_dict_set(@fpopt, 'preset', 'slow', 0);
+  ret := av_dict_set(@fpopt, 'preset', 'faster', 0);
   Assert(ret >= 0, 'av_dict_set error ' + inttostr(ret));
   ret := av_dict_set(@fpopt, 'tune', 'zerolatency', 0);
   Assert(ret >= 0, 'av_dict_set error ' + inttostr(ret));

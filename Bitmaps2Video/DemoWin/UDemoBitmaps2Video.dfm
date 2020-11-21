@@ -168,7 +168,7 @@ object Form1: TForm1
     Top = 186
     Width = 609
     Height = 289
-    ActivePage = TabSheet1
+    ActivePage = TabSheet2
     Align = alBottom
     TabOrder = 8
     object TabSheet1: TTabSheet
@@ -292,11 +292,13 @@ object Form1: TForm1
         ExplicitTop = 124
       end
       object Label12: TLabel
-        Left = 194
-        Top = 48
-        Width = 15
-        Height = 13
+        Left = 167
+        Top = 134
+        Width = 98
+        Height = 43
+        AutoSize = False
         Caption = '     '
+        WordWrap = True
       end
       object Image2: TImage
         Left = 3
@@ -367,7 +369,7 @@ object Form1: TForm1
       end
       object Button8: TButton
         Left = 277
-        Top = 130
+        Top = 128
         Width = 143
         Height = 25
         Caption = 'Insert Clip (main thread)'

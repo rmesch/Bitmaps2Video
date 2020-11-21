@@ -70,6 +70,7 @@ type
     fOnProgress: TVideoProgressEvent;
     function encode(frame: PAVFrame; FromVideo: boolean): boolean;
     procedure BitmapToFrame(const bm: TBitmap);
+    procedure Alphablend(fSrc1,fSrc2,fDst: PAVFrame; alpha: byte);
   public
     /// <param name="filename"> Output filename. Extension picks the container format (.mp4 .avi .mkv ..)
     /// </param>
@@ -112,9 +113,8 @@ type
     /// <param name="EffectTime"> Duration(integer) of the animation in ms </param>
     /// <param name="ZoomOption"> Quality of the zoom (zoAAx2, zoAAx4, zoAAx6, zoResample). </param>
     /// <param name="SpeedEnvelope"> Modifies the speed during EffectTime. (zeFastSlow, zeSlowFast, zeSlowSlow, zeLinear) </param>
-    procedure ZoomPan(const bm: TBitmap; SourceR, TargetR: TRectF;
-      EffectTime: integer; ZoomOption: TZoomOption;
-      SpeedEnvelope: TZoomSpeedEnvelope = zeLinear);
+   procedure ZoomPan(const bm: TBitmap; zSrc, zDst: TZoom; EffectTime: integer;
+      ZoomOption: TZoomOption; SpeedEnvelope: TZoomSpeedEnvelope = zeLinear);
 
     /// <summary> Close the file and make the output file usable. </summary>
     procedure CloseFile;
@@ -261,7 +261,7 @@ begin
   end;
 end;
 
-procedure TBitmapEncoder.ZoomPan(const bm: TBitmap; SourceR, TargetR: TRectF;
+procedure TBitmapEncoder.ZoomPan(const bm: TBitmap; zSrc, zDst: TZoom;
   EffectTime: integer; ZoomOption: TZoomOption;
   SpeedEnvelope: TZoomSpeedEnvelope = zeLinear);
 var
@@ -300,8 +300,8 @@ begin
     // upscale nicely
     ZoomResampleTripleOnly(bm, am, Rect(0, 0, bw, bh), 1.8);
     fact := aw / bw;
-    src := ScaleRect(SourceR, fact);
-    trg := ScaleRect(TargetR, fact); // scale rects to antialias-size
+    src := zSrc.ToRect(aw,ah);
+    trg := zDst.ToRect(aw,ah); // scale rects to antialias-size
     frametime := 1000 / fRate;
     elapsed := 0;
     targetTime := round(EffectTime - 0.5 * frametime);
@@ -900,6 +900,38 @@ begin
   yuvpic.Height := fHeight;
   ret := av_frame_get_buffer(yuvpic, 0);
   Assert(ret >= 0);
+end;
+
+
+//Alphablend rgb-frames
+//Must be of the same size
+//fDst = alpha*(fSrc2-fSrc1)/255 + fSrc1
+procedure TBitmapEncoder.Alphablend(fSrc1,fSrc2,fDst: PAVFrame; alpha: byte);
+var x,y,jump: integer;
+    rowSrc1,rowSrc2,rowDst: PByte;
+    bSrc1,bSrc2,bDst: PByte;
+begin
+  av_frame_make_writable(fDst);
+    rowSrc1:=fSrc1.data[0];
+    rowSrc2:=fSrc2.data[0];
+    rowDst:= fDst.data[0];
+    jump:=fDst.linesize[0];
+    for y:=0 to fDst.height-1 do
+    begin
+      bSrc1:=rowSrc1;
+      bSrc2:=rowSrc2;
+      bDst:=rowDst;
+      for x:=0 to fDst.linesize[0]-1 do
+      begin
+        bDst^:=(alpha*(bSrc2^-bSrc1^)) shr 8 + bSrc1^;
+        inc(bSrc1);
+        inc(bSrc2);
+        inc(bDst);
+      end;
+      inc(rowSrc1,jump);
+      inc(rowSrc2,jump);
+      inc(rowDst,jump);
+    end;
 end;
 
 procedure MuxStreams2(const VideoFile, AudioFile: string;
