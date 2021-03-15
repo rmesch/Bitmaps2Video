@@ -1,3 +1,18 @@
+03-15-2021
+*Encoder class Win
+
+Fixed some issues with 
+  mkv-files
+  GetVideoProps
+  GrabFrame
+
+Added functionalities:
+   CrossFade method
+   Simple video player utility
+Disabled CreateFromVideo, too many issues
+
+Extended and improved(naming) demo
+
 11-16-2020
 *Encoder class Multi-Platform:
 

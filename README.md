@@ -7,10 +7,10 @@ https://github.com/PassByYou888/FFMPEG-Header   Thanks!
 
 There are 2 versions of the encoder class:
 
-    TBitmapEncoder for platforms Win32 and Win64,
+    TBitmapEncoder VCL-based for platforms Win32 and Win64,
       relatively stable with H264, Mpeg-4, Mjpeg, Mpeg1/2 encoders and .avi, .mp4 containers.
  
-    TBitmapEncoderM for cross platform, a little less tested.
+    TBitmapEncoderM fmx-based for cross platform, a little less tested.
       Demo currently working with Win32, Win64, Android, Android64 thanks to TurboMagic.
       Recently more features translated from Win-version, more thoroughly tested under
       Android32, better demo.

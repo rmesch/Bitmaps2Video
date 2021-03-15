@@ -114,7 +114,7 @@ function PreferredCodec(Ext: string): TAVCodecId;
 function CodecSetupClass(CodecId: TAVCodecId): TCodecSetupClass;
 
 /// <summary> Register your own TCodecSetupClass to be used to set up the codec with ID CodecID. Returns true if successfully registered.
-/// CodecID must be a valid ID for a Libav-codec, see libavcodec.pas. </summary>
+/// CodecID must be a valid ID for a Libav-codec, see FFMpeg.pas. </summary>
 function RegisterEncoder(CodecId: TAVCodecId;
  CodecSetupClass: TCodecSetupClass; OverwriteIfExists: boolean): boolean;
 
@@ -268,7 +268,7 @@ var
   pixels, BitRateLow, BitRateHigh: integer;
 begin
   SquareRoot := 1 / sqrt(192 * 108 * 30);
-  factlow := 80 * SquareRoot;
+  factlow := 70 * SquareRoot;
   facthigh := 900 * SquareRoot;
   pixels := Width * Height * Rate;
   BitRateLow := round(sqrt(pixels) * factlow);
@@ -332,7 +332,7 @@ begin
   inherited;
   // these options only work for H264 and H265
 
-  ret := av_dict_set(@fpopt, 'preset', 'faster', 0);
+  ret := av_dict_set(@fpopt, 'preset', 'medium', 0);
   Assert(ret >= 0, 'av_dict_set error ' + inttostr(ret));
   ret := av_dict_set(@fpopt, 'tune', 'zerolatency', 0);
   Assert(ret >= 0, 'av_dict_set error ' + inttostr(ret));

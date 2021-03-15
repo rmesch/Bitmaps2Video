@@ -6,7 +6,9 @@ uses
   UBitmaps2Video in '..\EncoderClassWin\UBitmaps2Video.pas',
   UFormats in '..\EncoderClassWin\UFormats.pas',
   UTools in '..\EncoderClassWin\UTools.pas',
-  FFMPEG in '..\FFMPeg\Source\FFMPEG.pas';
+  FFMPEG in '..\FFMPeg\Source\FFMPEG.pas',
+  Vcl.Themes,
+  Vcl.Styles;
 
 {$R *.res}
 
