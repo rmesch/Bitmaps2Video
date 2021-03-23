@@ -91,10 +91,12 @@ type
       AR: TAVRational; Background: Byte);
     procedure ExpandToVideoSize(const FrameSrc, FrameDst: PAVFrame);
     procedure RGBFrameToFrame(const aFrame: PAVFrame);
-    procedure Alphablend(fSrc1, fSrc2, fDst: PAVFrame; alpha: byte);
+    procedure Alphablend(fSrc1, fSrc2, fDst: PAVFrame; alpha: Byte);
     procedure ZoomDeleteScans(const Src, Dest: PAVFrame; rs: TRectF);
-    procedure ZoomResampleTripleOnly(const Source, Target: PAVFrame; SourceRect: TRectF; Radius: single);
+    procedure ZoomResampleTripleOnly(const Source, Target: PAVFrame;
+      SourceRect: TRectF; Radius: single);
   public
+    DroppedFrames: integer;
     /// <param name="filename"> Output filename. Extension picks the container format (.mp4 .avi .mkv ..)
     /// </param>
     /// <param name="Width"> Video size in pixels (multiples of 2)</param>
@@ -130,6 +132,13 @@ type
     /// one of the movie, a grayscale background will be added (see Background in Create)</summary>
     procedure AddVideo(const VideoInput: string);
 
+    /// <summary> Make a smooth transition between 2 zoom rects within EffectTime.</summary>
+    /// <param name="bm"> The Bitmap(TBitmap) to be animated </param>
+    /// <param name="zSrc"> Beginning zoom into rect(0,0,bm.width,bm.height) (see TZoom) </param>
+    /// <param name="zDst"> End zoom into rect(0,0,bm.width,bm.height) </param>
+    /// <param name="EffectTime"> Duration(integer) of the animation in ms </param>
+    /// <param name="ZoomOption"> Quality of the zoom (zoAAx2, zoAAx4, zoAAx6, zoResample). </param>
+    /// <param name="SpeedEnvelope"> Modifies the speed during EffectTime. (zeFastSlow, zeSlowFast, zeSlowSlow, zeLinear) </param>
     procedure ZoomPan(const bm: TBitmap; zSrc, zDst: TZoom; EffectTime: integer;
       ZoomOption: TZoomOption; SpeedEnvelope: TZoomSpeedEnvelope = zeLinear);
 
@@ -199,7 +208,6 @@ var
   pkt: TAvPacket;
 begin
   result := true;
-  inc(fFrameCount);
   if fFrameCount mod fRate = 0 then // update once per second
   begin
     if assigned(fOnProgress) then
@@ -208,53 +216,58 @@ begin
   av_init_packet(@pkt);
   pkt.data := nil;
   pkt.size := 0;
-  if frame <> nil then
-  begin
-    frame.pts := fFrameCount;
-  end;
+  // leave frame.pts at default, otherwise mpeg-1 and mpeg-2 aren't happy
   ret := avcodec_send_frame(c, frame);
-  while ret >= 0 do
-  begin
-    ret := avcodec_receive_packet(c, @pkt);
-    // Could there be a bug in ffmpeg.pas mixing up AVERROR_EAGAIN and AVERROR_EDEADLK for Android?
-    if (ret = AVERROR_EAGAIN) or (ret = AVERROR_EOF) or (ret = AVERROR_EDEADLK)
-    then
+  if ret >= 0 then
+    while true do
     begin
-      exit;
+      ret := avcodec_receive_packet(c, @pkt);
+      // Could there be a bug in ffmpeg.pas mixing up AVERROR_EAGAIN and AVERROR_EDEADLK for Android?
+      if (ret = AVERROR_EOF) or (ret = AVERROR_EAGAIN) or (ret = AVERROR_EDEADLK)
+      then
+      begin
+        av_packet_unref(@pkt);
+        exit;
+      end
+      else if ret < 0 then
+      begin
+        Raise Exception.Create('Package read error');
+        exit;
+      end;
+
+      // Adjust the frame rate, now works
+      if FromVideo then
+      begin
+        pkt.dts := VideoDts;
+        pkt.pts := VideoPts;
+        av_packet_rescale_ts(@pkt, fInputVideoTimebase, c.time_base);
+        pkt.pts := fVideoFrameStart + pkt.pts;
+        pkt.dts := fVideoFrameStart + pkt.dts;
+        fFrameCount := pkt.dts;
+      end
+      else
+      begin
+        pkt.pts := fFrameCount;
+        pkt.dts := fFrameCount;
+        inc(fFrameCount);
+      end;
+      pkt.duration := 1;
+
+      av_packet_rescale_ts(@pkt, c.time_base, stream.time_base);
+      pkt.stream_index := stream.index;
+
+      // Write the encoded frame to the video file.
+      // Does not seem to fail anymore, ret<0 should maybe throw an exception
+      ret := av_interleaved_write_frame(oc, @pkt);
+      result := (ret >= 0);
+      av_packet_unref(@pkt);
+      fVideoTime := av_rescale_q(av_stream_get_end_pts(stream),
+        stream.time_base, av_make_q(1, 1000));
     end
-    else if ret < 0 then
-    begin
-      Raise Exception.Create('Package read error');
-      exit;
-    end;
-
-    // Adjust the frame rate, now works
-    if FromVideo then
-    begin
-      pkt.dts := VideoDts;
-      pkt.pts := VideoPts;
-      av_packet_rescale_ts(@pkt, fInputVideoTimebase, c.time_base);
-      pkt.pts := fVideoFrameStart + pkt.pts;
-      pkt.dts := fVideoFrameStart + pkt.dts;
-      fFrameCount := pkt.dts;
-    end
-    else
-    begin
-      pkt.pts := fFrameCount;
-      pkt.dts := fFrameCount;
-    end;
-
-    av_packet_rescale_ts(@pkt, c.time_base, stream.time_base);
-    pkt.stream_index := stream.index;
-
-    // Write the encoded frame to the video file.
-    // Can fail without causing harm, but should be checked in the debugger if frames are missing
-    ret := av_interleaved_write_frame(oc, @pkt);
-    result := (ret >= 0);
-    av_packet_unref(@pkt);
-    fVideoTime := round(1000 * av_rescale_q(av_stream_get_end_pts(stream),
-      stream.time_base, c.time_base) / fRate);
-  end;
+  else
+    result := false;
+  if not result then
+    inc(DroppedFrames);
 end;
 
 procedure TBitmapEncoderM.Freeze(EffectTime: integer);
@@ -266,7 +279,7 @@ begin
   time := 0;
   while time < EffectTime do
   begin
-    encode(yuvpic, False);
+    encode(yuvpic, false);
     time := time + frametime;
   end;
 end;
@@ -379,7 +392,7 @@ end;
 procedure TBitmapEncoderM.AddColorFrame(Color: TBGR);
 begin
   ColorToFrame(Color);
-  encode(yuvpic, False);
+  encode(yuvpic, false);
 end;
 
 procedure TBitmapEncoderM.AddFrame(const bm: TBitmap);
@@ -390,7 +403,7 @@ begin
 
   // Encode the yuv-frame
 
-  encode(yuvpic, False);
+  encode(yuvpic, false);
 
 end;
 
@@ -406,7 +419,7 @@ end;
 function TBitmapEncoderM.CloseFile: boolean;
 begin
   // flush the encoder
-  Assert(encode(nil, False));
+  av_write_frame(oc,nil);
 
   av_write_trailer(oc); // Writing the end of the file.
   if ((fmt.flags and AVFMT_NOFILE) = 0) then
@@ -486,6 +499,7 @@ begin
   fQuality := Quality;
   fVideoScaling := VideoScaling;
   fFrameCount := 0;
+  DroppedFrames := 0;
   fBackground := Background;
   // the pixel-format of all rgb-frames matches the one of the operating system
 {$IFDEF ANDROID}
@@ -559,24 +573,24 @@ end;
 
 procedure TBitmapEncoderM.CrossFade(const am, bm: TBitmap; EffectTime: integer);
 var
-  fsrc1, fsrc2, temp: PAVFrame;
+  fSrc1, fSrc2, temp: PAVFrame;
   frametime, time, fact: double;
 begin
-  fsrc1 := av_frame_alloc;
+  fSrc1 := av_frame_alloc;
   try
     temp := av_frame_alloc;
     try
       BitmapToRGBFrame(am, temp);
-      ExpandToVideoSize(temp, fsrc1);
+      ExpandToVideoSize(temp, fSrc1);
     finally
       av_frame_free(@temp);
     end;
-    fsrc2 := av_frame_alloc;
+    fSrc2 := av_frame_alloc;
     try
       temp := av_frame_alloc;
       try
         BitmapToRGBFrame(bm, temp);
-        ExpandToVideoSize(temp, fsrc2);
+        ExpandToVideoSize(temp, fSrc2);
       finally
         av_frame_free(@temp);
       end;
@@ -592,19 +606,19 @@ begin
         av_frame_get_buffer(temp, 0);
         while time < EffectTime do
         begin
-          Alphablend(fsrc1, fsrc2, temp, trunc(time * fact * 255));
+          Alphablend(fSrc1, fSrc2, temp, trunc(time * fact * 255));
           RGBFrameToFrame(temp);
-          encode(yuvpic, False);
+          encode(yuvpic, false);
           time := time + frametime;
         end;
       finally
         av_frame_free(@temp);
       end;
     finally
-      av_frame_free(@fsrc2);
+      av_frame_free(@fSrc2);
     end;
   finally
-    av_frame_free(@fsrc1);
+    av_frame_free(@fSrc1);
   end;
 end;
 
@@ -754,7 +768,7 @@ begin
     (* read frames from the file *)
     fVideoFrameStart := fFrameCount + 1;
     fVideoFrameCount := 0;
-    QuitLoop := False;
+    QuitLoop := false;
     while true do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
@@ -765,7 +779,6 @@ begin
         av_packet_unref(@pkt);
         Continue;
       end;
-      inc(fVideoFrameCount);
       (* decode video frame *)
       // !avcodec_decode_video2 is deprecated, but I couldn't get
       // the replacement avcode_send_packet and avcodec_receive_frame to work
@@ -775,6 +788,7 @@ begin
 
       if (got_frame <> 0) then
       begin
+        inc(fVideoFrameCount);
         // This is needed to give the frames the right decoding- and presentation- timestamps
         // see encode for FromVideo = true
         VideoPts := pkt.pts;
@@ -927,18 +941,18 @@ var
 begin
   temp := av_frame_alloc;
   try
-    ExpandToAspectRatio(FrameSrc, temp, av_make_q(fWidth, fHeight),fBackground);
-    convertCtx := sws_getContext(Temp.Width, Temp.Height, fRGB_pix_fmt,
-      fWidth, fHeight, fRGB_pix_fmt, ScaleFunction[fVideoScaling], nil,
-      nil, nil);
+    ExpandToAspectRatio(FrameSrc, temp, av_make_q(fWidth, fHeight),
+      fBackground);
+    convertCtx := sws_getContext(temp.Width, temp.Height, fRGB_pix_fmt, fWidth,
+      fHeight, fRGB_pix_fmt, ScaleFunction[fVideoScaling], nil, nil, nil);
     try
       FrameDst.Width := fWidth;
       FrameDst.Height := fHeight;
       FrameDst.format := Ord(fRGB_pix_fmt);
       av_frame_get_buffer(FrameDst, 0);
       av_frame_make_writable(FrameDst);
-      sws_scale(convertCtx, @Temp.data, @Temp.linesize, 0,
-        Temp.Height, @FrameDst.data, @FrameDst.linesize);
+      sws_scale(convertCtx, @temp.data, @temp.linesize, 0, temp.Height,
+        @FrameDst.data, @FrameDst.linesize);
     finally
       sws_freeContext(convertCtx);
     end;
@@ -954,7 +968,7 @@ var
   asp: double;
   aw, ah: integer; // antialiased width height
   elapsed: integer;
-  src, trg, mid: TRectF;
+  Src, trg, mid: TRectF;
   targetTime: integer;
   frametime, t: double;
   evf: TEnvelopeFunction;
@@ -995,7 +1009,7 @@ begin
     finally
       av_frame_free(@frRGB);
     end;
-    src := zSrc.ToRect(aw, ah);
+    Src := zSrc.ToRect(aw, ah);
     trg := zDst.ToRect(aw, ah); // scale zooms to rects for antialias-size
     frametime := 1000 / fRate;
     elapsed := 0;
@@ -1010,7 +1024,7 @@ begin
       while elapsed < targetTime do
       begin
         t := elapsed / EffectTime;
-        mid := Interpolate(src, trg, evf(t));
+        mid := Interpolate(Src, trg, evf(t));
         case ZoomOption of
           zoAAx2, zoAAx4, zoAAx6:
             ZoomDeleteScans(frSrc, frDst, mid);
@@ -1020,7 +1034,7 @@ begin
         end;
         // feed frDst to the encoder
         RGBFrameToFrame(frDst);
-        encode(yuvpic, False);
+        encode(yuvpic, false);
         elapsed := round(elapsed + frametime);
       end;
     finally
@@ -1031,35 +1045,36 @@ begin
   end;
 end;
 
-//Alphablend rgb-frames
-//Must be of the same size
-//fDst = alpha*(fSrc2-fSrc1)/255 + fSrc1
-procedure TBitmapEncoderM.Alphablend(fSrc1,fSrc2,fDst: PAVFrame; alpha: byte);
-var x,y,jump: integer;
-    rowSrc1,rowSrc2,rowDst: PByte;
-    bSrc1,bSrc2,bDst: PByte;
+// Alphablend rgb-frames
+// Must be of the same size
+// fDst = alpha*(fSrc2-fSrc1)/255 + fSrc1
+procedure TBitmapEncoderM.Alphablend(fSrc1, fSrc2, fDst: PAVFrame; alpha: Byte);
+var
+  x, y, jump: integer;
+  rowSrc1, rowSrc2, rowDst: PByte;
+  bSrc1, bSrc2, bDst: PByte;
 begin
   av_frame_make_writable(fDst);
-    rowSrc1:=fSrc1.data[0];
-    rowSrc2:=fSrc2.data[0];
-    rowDst:= fDst.data[0];
-    jump:=fDst.linesize[0];
-    for y:=0 to fDst.height-1 do
+  rowSrc1 := fSrc1.data[0];
+  rowSrc2 := fSrc2.data[0];
+  rowDst := fDst.data[0];
+  jump := fDst.linesize[0];
+  for y := 0 to fDst.Height - 1 do
+  begin
+    bSrc1 := rowSrc1;
+    bSrc2 := rowSrc2;
+    bDst := rowDst;
+    for x := 0 to fDst.linesize[0] - 1 do
     begin
-      bSrc1:=rowSrc1;
-      bSrc2:=rowSrc2;
-      bDst:=rowDst;
-      for x:=0 to fDst.linesize[0]-1 do
-      begin
-        bDst^:=(alpha*(bSrc2^-bSrc1^)) shr 8 + bSrc1^;
-        inc(bSrc1);
-        inc(bSrc2);
-        inc(bDst);
-      end;
-      inc(rowSrc1,jump);
-      inc(rowSrc2,jump);
-      inc(rowDst,jump);
+      bDst^ := (alpha * (bSrc2^ - bSrc1^)) shr 8 + bSrc1^;
+      inc(bSrc1);
+      inc(bSrc2);
+      inc(bDst);
     end;
+    inc(rowSrc1, jump);
+    inc(rowSrc2, jump);
+    inc(rowDst, jump);
+  end;
 end;
 
 type
@@ -1074,15 +1089,17 @@ type
 
   TIntArray = array of integer;
 
-  {$IFDEF ANDROID}
+{$IFDEF ANDROID}
+
   TQuad = record
-    r,g,b,a: byte;
+    r, g, b, a: Byte;
   end;
-  {$ELSE}
+{$ELSE}
+
   TQuad = record
-  b,g,r,a: byte;
+    b, g, r, a: Byte;
   end;
-  {$ENDIF}
+{$ENDIF}
 
   PQuad = ^TQuad;
 
@@ -1096,14 +1113,14 @@ const
   dd = -alpha * beta2;
   // constants computed with maple for polynomial fit
 
-function AntiMyFilter(X: double): double; inline;
+function AntiMyFilter(x: double): double; inline;
 // Antiderivative of a filter function similar to bicubic, but I like it better
 begin
-  if X < -1 then
+  if x < -1 then
     result := -0.5
-  else if X < 1 then
-    result := aa * X * X * X * X * X * X * X + bb * X * X * X * X * X + cc * X *
-      X * X + dd * X
+  else if x < 1 then
+    result := aa * x * x * x * x * x * x * x + bb * x * x * x * x * x + cc * x *
+      x * x + dd * x
 
   else
     result := 0.5;
@@ -1114,7 +1131,7 @@ procedure MakeContributors(r: single; SourceSize, TargetSize: integer;
 // r: Filterradius
 var
   xCenter, scale, rr: double;
-  X, j: integer;
+  x, j: integer;
   x1, x2, delta: double;
   TrueMin, TrueMax, Mx: integer;
 begin
@@ -1130,20 +1147,20 @@ begin
     rr := r;
   delta := 1 / rr;
 
-  for X := 0 to TargetSize - 1 do
+  for x := 0 to TargetSize - 1 do
   begin
-    xCenter := (X + 0.5) * scale;
+    xCenter := (x + 0.5) * scale;
     TrueMin := Ceil(xCenter - rr + SourceStart - 1);
     TrueMax := Floor(xCenter + rr + SourceStart);
-    Contribs[X].Min := Min(Max(TrueMin, 0), SourceSize - 1);
+    Contribs[x].Min := Min(Max(TrueMin, 0), SourceSize - 1);
     // make sure not to read in negative pixel locations
     Mx := Max(Min(TrueMax, SourceSize - 1), 0);
     // make sure not to read past w1-1 in the source
-    Contribs[X].High := Mx - Contribs[X].Min;
-    assert(Contribs[X].High >= 0); // hasn't failed lately:)
+    Contribs[x].High := Mx - Contribs[x].Min;
+    Assert(Contribs[x].High >= 0); // hasn't failed lately:)
     // High=Number of contributing pixels minus 1
-    SetLength(Contribs[X].Weights, Contribs[X].High + 1);
-    with Contribs[X] do
+    SetLength(Contribs[x].Weights, Contribs[x].High + 1);
+    with Contribs[x] do
     begin
       x1 := delta * (Min - SourceStart - xCenter);
       for j := 0 to High do
@@ -1172,7 +1189,7 @@ begin
   end; { for x }
 end;
 
-//Source and Target must have been allocated, the right size and format and memory must have been allocated
+// Source and Target must have been allocated, the right size and format and memory must have been allocated
 procedure TBitmapEncoderM.ZoomResampleTripleOnly(const Source, Target: PAVFrame;
   SourceRect: TRectF; Radius: single);
 var
@@ -1189,7 +1206,7 @@ var
   rs, rT, rStart, rTStart: PByte; // Row start in Source, Target
   weightx, weighty, weightxStart: PInteger;
   rx, gx, bx: TIntArray;
-  X, Y, xs, ys, ymin, ymax: integer;
+  x, y, xs, ys, ymin, ymax: integer;
   highx, highy, minx, miny: integer;
   runr, rung, runb: PInteger;
   runrstart, rungstart, runbstart: PInteger;
@@ -1214,10 +1231,10 @@ begin
   SetLength(gx, ymax - ymin + 1);
   SetLength(bx, ymax - ymin + 1); // cache arrays
 
-  av_Frame_Make_Writable(Target);
-  rStart := Source.Data[0];
-  inc(rStart,ymin*Source.linesize[0]);
-  rTStart := Target.Data[0];
+  av_frame_make_writable(Target);
+  rStart := Source.data[0];
+  inc(rStart, ymin * Source.linesize[0]);
+  rTStart := Target.data[0];
 
   // Compute color at each target pixel (x,y)
 
@@ -1225,16 +1242,16 @@ begin
   rungstart := @gx[0];
   runbstart := @bx[0];
 
-  for X := 0 to NewWidth - 1 do
+  for x := 0 to NewWidth - 1 do
   begin
     rs := rStart;
-    highx := ContribsX[X].High;
-    minx := ContribsX[X].Min;
-    weightxStart := @ContribsX[X].Weights[0];
+    highx := ContribsX[x].High;
+    minx := ContribsX[x].Min;
+    weightxStart := @ContribsX[x].Weights[0];
     runr := runrstart;
     rung := rungstart;
     runb := runbstart;
-    for Y := ymin to ymax do
+    for y := ymin to ymax do
     begin
 
       // For each source line y
@@ -1271,13 +1288,13 @@ begin
     // Store result in tr,tg,tb ("total red" etc.)
     // round and assign to TargetPixel[x,y]
     rT := rTStart;
-    for Y := 0 to NewHeight - 1 do
+    for y := 0 to NewHeight - 1 do
     begin
       pT := PQuad(rT);
-      inc(pT, X);
-      highy := ContribsY[Y].High;
-      miny := ContribsY[Y].Min - ymin;
-      weighty := @ContribsY[Y].Weights[0];
+      inc(pT, x);
+      highy := ContribsY[y].High;
+      miny := ContribsY[y].Min - ymin;
+      weighty := @ContribsY[y].Weights[0];
       runr := runrstart;
       rung := rungstart;
       runb := runbstart;
@@ -1313,7 +1330,6 @@ begin
   end; // for x
 end;
 
-
 procedure MakeSteps(DestSize, SourceSize: integer;
   SourceLeft, SourceWidth: double; var steps: TIntArray; fact: integer); inline;
 var
@@ -1342,10 +1358,11 @@ begin
   end;
 end;
 
-procedure TBitmapEncoderM.ZoomDeleteScans(const Src, Dest: PAVFrame; rs: TRectF);
+procedure TBitmapEncoderM.ZoomDeleteScans(const Src, Dest: PAVFrame;
+  rs: TRectF);
 var
   iwd, ihd, iws, ihs, bs, bd: integer;
-  X, Y: integer;
+  x, y: integer;
   xsteps, ysteps: TIntArray;
   Rows, rowd: PByte;
   Stepsx, Stepsy: PInteger;
@@ -1354,27 +1371,27 @@ begin
 
   iwd := Dest.Width;
   ihd := Dest.Height;
-  assert((iwd > 1) and (ihd > 1), 'Dest Frame too small');
+  Assert((iwd > 1) and (ihd > 1), 'Dest Frame too small');
   iws := Src.Width;
   ihs := Src.Height;
 
-  av_frame_Make_Writable(Dest);
-  bs:=Src.linesize[0]; // BytesPerScanline Source
-  bd:=Dest.linesize[0]; // BytesPerScanline Dest
+  av_frame_make_writable(Dest);
+  bs := Src.linesize[0]; // BytesPerScanline Source
+  bd := Dest.linesize[0]; // BytesPerScanline Dest
   MakeSteps(iwd, iws, rs.Left, rs.Right - rs.Left, xsteps, 1);
   MakeSteps(ihd, ihs, rs.Top, rs.Bottom - rs.Top, ysteps, bs);
 
   Rows := Src.data[0];
-  rowd := Dest.Data[0];
+  rowd := Dest.data[0];
   Stepsy := @ysteps[0];
 
-  for Y := 0 to ihd - 1 do
+  for y := 0 to ihd - 1 do
   begin
     inc(Rows, Stepsy^);
     ts := PQuad(Rows);
     td := PQuad(rowd);
     Stepsx := @xsteps[0];
-    for X := 0 to iwd - 1 do
+    for x := 0 to iwd - 1 do
     begin
       inc(ts, Stepsx^);
       td^ := ts^;
@@ -1385,7 +1402,6 @@ begin
     inc(Stepsy);
   end;
 end;
-
 
 procedure MuxStreams2(const VideoFile, AudioFile: string;
   const OutputFile: string);

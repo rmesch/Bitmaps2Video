@@ -24,11 +24,9 @@ object Form1: TForm1
     ActivePage = TabSheet6
     Align = alClient
     TabOrder = 0
-    ExplicitWidth = 609
     object TabSheet6: TTabSheet
       Caption = 'Simple Animation'
       ImageIndex = 5
-      ExplicitWidth = 601
       object ImageAni: TImage
         Left = 356
         Top = 21
@@ -87,7 +85,6 @@ object Form1: TForm1
     object TabSheet7: TTabSheet
       Caption = 'Simple Slideshow'
       ImageIndex = 6
-      ExplicitWidth = 601
       DesignSize = (
         623
         277)
@@ -134,7 +131,6 @@ object Form1: TForm1
         VertScrollBar.Visible = False
         Anchors = [akLeft, akTop, akRight]
         TabOrder = 0
-        ExplicitWidth = 600
         object Image1: TImage
           Left = 11
           Top = 3
@@ -218,7 +214,6 @@ object Form1: TForm1
     end
     object TabSheet1: TTabSheet
       Caption = 'Zooming'
-      ExplicitWidth = 601
       object ImageZoomPicture: TImage
         Left = 9
         Top = 10
@@ -311,7 +306,6 @@ object Form1: TForm1
     object TabSheet2: TTabSheet
       Caption = 'Inserting an existing video'
       ImageIndex = 1
-      ExplicitWidth = 601
       object Label11: TLabel
         Left = 0
         Top = 204
@@ -439,7 +433,6 @@ object Form1: TForm1
       Enabled = False
       ImageIndex = 2
       TabVisible = False
-      ExplicitWidth = 601
       DesignSize = (
         623
         277)
@@ -501,6 +494,7 @@ object Form1: TForm1
         Height = 25
         Caption = 'Load video and process further'
         TabOrder = 0
+        OnClick = Button6Click
       end
       object Memo1: TMemo
         Left = 243
@@ -528,7 +522,6 @@ object Form1: TForm1
     object TabSheet4: TTabSheet
       Caption = 'Add Audio'
       ImageIndex = 3
-      ExplicitWidth = 601
       object Label5: TLabel
         Left = 20
         Top = 59
@@ -577,7 +570,6 @@ object Form1: TForm1
     object TabSheet5: TTabSheet
       Caption = 'Simple Video Player'
       ImageIndex = 4
-      ExplicitWidth = 601
       object Panel1: TPanel
         Left = 0
         Top = 222
@@ -585,7 +577,6 @@ object Form1: TForm1
         Height = 55
         Align = alBottom
         TabOrder = 0
-        ExplicitWidth = 601
         DesignSize = (
           623
           55)
@@ -597,6 +588,14 @@ object Form1: TForm1
           Anchors = [akTop, akRight]
           Caption = '         '
           ExplicitLeft = 415
+        end
+        object LabelAudioDelay: TLabel
+          Left = 516
+          Top = 6
+          Width = 86
+          Height = 13
+          Anchors = [akTop, akRight]
+          Caption = 'Audio-Delay [ms]:'
         end
         object ButtonStartPlaying: TButton
           Left = 153
@@ -638,7 +637,18 @@ object Form1: TForm1
           LineSize = 0
           TabOrder = 3
           TickStyle = tsNone
-          ExplicitWidth = 416
+        end
+        object SpinAudioDelay: TSpinEdit
+          Left = 516
+          Top = 25
+          Width = 101
+          Height = 22
+          Anchors = [akTop, akRight]
+          Increment = 10
+          MaxValue = 0
+          MinValue = 0
+          TabOrder = 4
+          Value = 90
         end
       end
       object Panel2: TPanel
@@ -648,7 +658,6 @@ object Form1: TForm1
         Height = 222
         Align = alRight
         TabOrder = 1
-        ExplicitLeft = 380
         object Label26: TLabel
           Left = 1
           Top = 1
@@ -661,12 +670,13 @@ object Form1: TForm1
             'Demo for the utility procedure PlayVideoStream in UTools.pas. Vi' +
             'deo files can be loaded and displayed with very little delay whe' +
             'n started at time 0, which makes this procedure suitable for pre' +
-            'views. The way the player works is however not very efficient CP' +
-            'U-wise, use it for small clips, even though it can play movies. ' +
-            'If you have bass.dll, you can use it to also have the audio-trac' +
-            'k playing. Enable {$Define UseBass} at the top of this demo. You' +
-            ' need to have bass.pas in your path and bass.dll in the exe-fold' +
-            'er.'
+            'views. The player is a bit kludgy, however, and not very efficie' +
+            'nt CPU-wise, use it for small clips, even though it can play mov' +
+            'ies. If you have bass.dll, you can use it to also have an audio-' +
+            'track playing. Enable {$Define UseBass} at the top of this demo.' +
+            ' You need to have bass.pas in your path and bass.dll in the exe-' +
+            'folder. The first audio track will be played, and only two chann' +
+            'els.'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = 2052118
           Font.Height = -11
@@ -675,7 +685,8 @@ object Form1: TForm1
           ParentFont = False
           Layout = tlCenter
           WordWrap = True
-          ExplicitTop = 2
+          ExplicitLeft = 6
+          ExplicitTop = -4
         end
       end
       object Panel4: TPanel
@@ -691,8 +702,6 @@ object Form1: TForm1
         ParentBackground = False
         ParentCtl3D = False
         TabOrder = 2
-        ExplicitLeft = -5
-        ExplicitTop = -6
       end
     end
   end
@@ -705,8 +714,6 @@ object Form1: TForm1
     Color = 14216665
     ParentBackground = False
     TabOrder = 1
-    ExplicitTop = -6
-    ExplicitWidth = 609
     object Label1: TLabel
       Left = 18
       Top = 4

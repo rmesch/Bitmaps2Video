@@ -102,6 +102,8 @@ type
     Label24: TLabel;
     Label25: TLabel;
     Label26: TLabel;
+    LabelAudioDelay: TLabel;
+    SpinAudioDelay: TSpinEdit;
     procedure ButtonMakeZoomMovieClick(Sender: TObject);
     procedure ButtonOpenOutputClick(Sender: TObject);
     procedure ButtonLoadZoomPictureClick(Sender: TObject);
@@ -113,7 +115,7 @@ type
     procedure RateComboChange(Sender: TObject);
     procedure SpinEditQualityChange(Sender: TObject);
     procedure CodecComboChange(Sender: TObject);
-    //procedure Button6Click(Sender: TObject);
+    // procedure Button6Click(Sender: TObject);
     procedure ButtonLoadVideoClipClick(Sender: TObject);
     procedure FrameSpinChange(Sender: TObject);
     procedure ButtonInsertClipMainThreadClick(Sender: TObject);
@@ -125,6 +127,7 @@ type
     procedure FormDestroy(Sender: TObject);
     procedure Image1Click(Sender: TObject);
     procedure ButtonMakeSlideshowClick(Sender: TObject);
+    procedure Button6Click(Sender: TObject);
   private
     fVideoFile, fPlayerFile: string;
     fStopVideo: boolean;
@@ -145,8 +148,8 @@ type
     TheProgressbar: TProgressBar;
     procedure UpdateVideo(Videotime: int64);
     procedure UpdateVideoThreaded(Videotime: int64);
-    //properties translating the setup controls' state into values
-    //to pass to TBitmapEncoder.Create.
+    // properties translating the setup controls' state into values
+    // to pass to TBitmapEncoder.Create.
     property FrameRate: integer read GetFrameRate;
     property VideoHeight: integer read GetVideoHeight;
     property VideoWidth: integer read GetVideoWidth;
@@ -244,13 +247,13 @@ begin
     AudStream := 0;
   end;
   if AudStream <> 0 then
+    // Audio delay of SpinAudioDelay.Value ms to help sync
     BASS_ChannelSetPosition(AudStream, Bass_ChannelSeconds2Bytes(AudStream,
-      TrackBar1.Position), BASS_POS_BYTE);
+      TrackBar1.Position - 0.001*SpinAudioDelay.Value), BASS_POS_BYTE);
 {$ENDIF}
-
-  // Playing the video on the canvas of a TPanel is less error prone than doing it on a paintbox.
-  PlayVideoStream(Panel4, fPlayerFile,
-    1000 * TrackBar1.Position,
+  // Playing the video on the canvas of a TPanel is less error prone than doing it in a paintbox.
+  // A start position > 0 is not very efficient yet
+  PlayVideoStream(Panel4, fPlayerFile, 1000 * TrackBar1.Position,
 
 {$IFDEF UseBass}
     procedure
@@ -320,7 +323,7 @@ begin
     EncoderId, vsBiCubic, VideoBackGround);
   try
     // VideoTime = Framecount * FrameTime
-    ProgressBar3.Max := round(179 * 1000 / FrameRate);
+    ProgressBar3.Max := trunc(179 * 1000 / FrameRate);
     ProgressBar3.Position := 0;
     TheProgressbar := ProgressBar3;
     bme.OnProgress := UpdateVideo;
@@ -366,6 +369,7 @@ begin
   finally
     bme.Free;
   end;
+  TheProgressbar.Position := TheProgressbar.Max;
 end;
 
 procedure TForm1.ButtonPlayOutputClick(Sender: TObject);
@@ -403,7 +407,7 @@ begin
   ProgressBar4.Max := 7 * 7000 + 7 * 1200;
   ProgressBar4.Position := 0;
   TheProgressbar := ProgressBar4;
-  Label22.Caption:='     ';
+  Label22.Caption := '     ';
   aTask := TTask.Create(
     procedure
     begin
@@ -445,7 +449,7 @@ begin
         procedure
         begin
           TheProgressbar.Position := TheProgressbar.Max;
-          Label22.Caption:='Done';
+          Label22.Caption := 'Done';
         end);
     end);
   aTask.Start;
@@ -543,6 +547,69 @@ begin
     ImageZoomPicture.Picture.LoadFromFile(OPD.filename);
 end;
 
+procedure TextOnBitmap(const bm: TBitmap; const _text: string);
+var
+  r: TRect;
+  r1: TRectF;
+begin
+  bm.Canvas.Lock;
+  try
+    bm.Canvas.Font.color := clWhite;
+    bm.Canvas.brush.style := bsClear;
+    bm.Canvas.Font.Height := bm.Height div 10;
+    r := Rect(0, 0, bm.Width, bm.Height);
+    DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r,
+      dt_Center or dt_CalcRect);
+    r1 := TRectF(r);
+    CenterRect(r1, RectF(0, 0, bm.Width, bm.Height));
+    r := r1.round;
+    DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r, dt_Center);
+  Finally
+    bm.Canvas.Unlock;
+  End;
+end;
+
+procedure BlackBitmap(const bm: TBitmap; w, h: integer);
+begin
+  bm.PixelFormat := pf32bit;
+  bm.SetSize(w, h);
+  bm.Canvas.Lock; // necessary for threads
+  BitBlt(bm.Canvas.Handle, 0, 0, w, h, 0, 0, 0, BLACKNESS);
+  bm.Canvas.Unlock;
+end;
+
+procedure TForm1.Button6Click(Sender: TObject);
+{
+  var
+    bme: TBitmapEncoder;
+    bm: TBitmap;
+}
+
+begin
+  {
+    if not OVD.execute then
+       exit;
+     Label15.Caption := 'Working';
+     Label15.Repaint;
+     bme := TBitmapEncoder.CreateFromVideo(OVD.filename, EditOutput.Text,
+       vsBiCubic, BgColors[BgCombo.ItemIndex]);
+     try
+       bm := TBitmap.Create;
+       try
+         BlackBitmap(bm, bme.VideoWidth, bme.VideoHeight);
+         TextOnBitmap(bm, 'End Slide Added');
+         bme.AddStillImage(bm, 4000);
+       finally
+         bm.Free;
+       end;
+       bme.CloseFile;
+     finally
+       bme.Free;
+     end;
+     Label15.Caption := 'Done';
+ }
+end;
+
 procedure TForm1.ButtonAddAudioClick(Sender: TObject);
 var
   Tempfile, Audiofile: string;
@@ -577,66 +644,6 @@ begin
   UpdateCodecCombo;
 end;
 
-procedure TextOnBitmap(const bm: TBitmap; const _text: string);
-var
-  r: TRect;
-  r1: TRectF;
-begin
-  bm.Canvas.Lock;
-  try
-    bm.Canvas.Font.color := clWhite;
-    bm.Canvas.brush.style := bsClear;
-    bm.Canvas.Font.Height := bm.Height div 10;
-    r := Rect(0, 0, bm.Width, bm.Height);
-    DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r,
-      dt_Center or dt_CalcRect);
-    r1 := TRectF(r);
-    CenterRect(r1, RectF(0, 0, bm.Width, bm.Height));
-    r := r1.round;
-    DrawText(bm.Canvas.Handle, PChar(_text), length(_text), r, dt_Center);
-  Finally
-    bm.Canvas.Unlock;
-  End;
-end;
-
-procedure BlackBitmap(const bm: TBitmap; w, h: integer);
-begin
-  bm.PixelFormat := pf32bit;
-  bm.SetSize(w, h);
-  bm.Canvas.Lock; // necessary for threads
-  BitBlt(bm.Canvas.Handle, 0, 0, w, h, 0, 0, 0, BLACKNESS);
-  bm.Canvas.Unlock;
-end;
-
-{
-  procedure TForm1.Button6Click(Sender: TObject);
-  var
-    bme: TBitmapEncoder;
-    bm: TBitmap;
-
-  begin
-    if not OVD.execute then
-      exit;
-    Label15.Caption := 'Working';
-    Label15.Repaint;
-    bme := TBitmapEncoder.CreateFromVideo(OVD.filename, EditOutput.Text,
-      vsBiCubic, BgColors[BgCombo.ItemIndex]);
-    try
-      bm := TBitmap.Create;
-      try
-        BlackBitmap(bm, bme.VideoWidth, bme.VideoHeight);
-        TextOnBitmap(bm, 'End Slide Added');
-        bme.AddStillImage(bm, 4000);
-      finally
-        bm.Free;
-      end;
-      bme.CloseFile;
-    finally
-      bme.Free;
-    end;
-    Label15.Caption := 'Done';
-  end;
-}
 
 procedure TForm1.ButtonLoadVideoClipClick(Sender: TObject);
 var
@@ -715,8 +722,9 @@ begin
     h := VideoHeight;
     w := VideoWidth;
     // load the 1st frame from the video
+    //de-interlace it, if interlaced
     try
-      GrabFrame(bm, fVideoFile, 1);
+      GrabFrame(bm, fVideoFile, 1, true);
     except
       // We catch the exception, since GrabFrame does not
       // yet work reliably with foreign video content
@@ -733,12 +741,14 @@ begin
       // bme.LastVideoFrameCount always contains the frame count of the last
       // added video.
       try
-        GrabFrame(bm, fVideoFile, bme.LastVideoFrameCount - 2);
+        GrabFrame(bm, fVideoFile, bme.LastVideoFrameCount - 2, true);
       except
         BlackBitmap(bm, w, h);
       end;
       TextOnBitmap(bm, 'The End');
-      bme.AddStillImage(bm, 5000);
+      bme.AddStillImage(bm, 1000);
+      bme.ZoomPan(bm,MakeZoom(0,0,1),MakeZoom(0.25,0.25,0.5),2000,TZoomOption.zoAAx4);
+      bme.Freeze(2000);
       f := bme.framecount;
       bme.CloseFile;
     finally
@@ -804,6 +814,11 @@ begin
     aImage.Canvas.Fillrect(aImage.ClientRect);
     fSlideshowList.add(aImage);
   end;
+  {$IFDEF UseBass}
+  {$ELSE}
+  LabelAudioDelay.Visible:=false;
+  SpinAudioDelay.Visible:=false;
+  {$ENDIF}
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);

@@ -1,5 +1,14 @@
+03-24-2021
+*Both versions:
+Timing fixes (.encode)
+Fixed an asinine error in .closefile
+
+*VCL-Win
+PlayVideoStream should render a bit more smoothly
+GrabFrame now has an option to de-interlace the frame
+
 03-15-2021
-*Encoder class Win
+*Encoder class VCL-Win
 
 Fixed some issues with 
   mkv-files

@@ -42,7 +42,7 @@ type
     VideoTimeBase: TAVRational;
   end;
 
-  /// <summary> (lScale,tScale): LeftTop as fractions of (Width,Height). sScale: Size as Fraction of Width/Height </summary>
+  /// <summary> (lScale,tScale): (Left,Top) as fractions of (Width,Height). sScale: Size as Fraction of Width/Height </summary>
   TZoom = record
     lScale, tScale, sScale: double;
     function ToRect(Width, Height: integer): TRectF; inline;
@@ -81,9 +81,9 @@ function ScaleRect(SourceR: TRectF; fact: double): TRectF; inline;
 procedure CenterRect(var aRect: TRectF; BigR: TRectF);
 inline
 
-/// <summary> Convert frame number FrameNumber of a video file into a bitmap </summary>
+/// <summary> Convert frame number FrameNumber of a video file into a bitmap. Quite slow for high frame numbers yet. </summary>
 procedure GrabFrame(const bm: TBitmap; const Videofile: string;
-  FrameNumber: integer);
+  FrameNumber: integer; DeInterlaceIfNecessary: boolean = false);
 
 /// <summary> Get video time in ms of the Videofile </summary>
 function GetVideoTime(const Videofile: string): int64;
@@ -100,7 +100,7 @@ type
   /// <param name="aRect"> Rectangle within which to display the video. Will be fit to largest size preserving aspect ratio. </param>
   /// <param name="VideoStartTime" Time in ms into the video at which to start. Not very efficient when >0. </param>
   /// <param name="OnStart" Event called at the start of the video display. Can be used to play a matching audio stream. </param>
-  /// <param name="OnStopQuery" Event called at regular intervals. Return quit:=true to stop the video. If not assigned the video plays until finished." </param>
+  /// <param name="OnStopQuery" Event called at regular intervals. Return quit:=true to stop the video. If not assigned the video plays until finished. </param>
 procedure PlayVideoStream(aCanvas: TCanvas; const Videofile: string;
   aRect: TRect; VideoStartTime: int64 = 0; OnStart: TStartEvent = nil;
   OnStopQuery: TStopQuery = nil); overload;
@@ -108,6 +108,12 @@ procedure PlayVideoStream(aCanvas: TCanvas; const Videofile: string;
 procedure PlayVideoStream(aControl: TCustomControl; const Videofile: string;
   VideoStartTime: int64 = 0; OnStart: TStartEvent = nil;
   OnStopQuery: TStopQuery = nil); overload;
+
+//TZoom utility functions
+
+function RectToZoom(r: TRectF; Width, Height: integer): TZoom; inline;
+
+function MakeZoom(l, t, s: double): TZoom; inline;
 
 (* **** The following procedures are used internally *********** *)
 
@@ -130,9 +136,6 @@ procedure ExpandToAspectRatio(FrameSrc, FrameDst: PAVFrame; AR: TAVRational;
 Procedure ExpandSizeToAspect(Width, Height: integer; AR: TAVRational;
   var NewWidth, NewHeight: integer); inline;
 
-function RectToZoom(r: TRectF; Width, Height: integer): TZoom; inline;
-
-function MakeZoom(l, t, s: double): TZoom; inline;
 
 // Zoom-Pan speed modifiers
 function SlowSlow(t: double): double; inline;
@@ -160,7 +163,7 @@ const
 
 implementation
 
-uses System.Math, WinApi.MMSystem, VCL.Dialogs;
+uses System.Math, WinApi.MMSystem, VCL.Dialogs, System.SyncObjs;
 
 function TZoom.ToRect(Width, Height: integer): TRectF;
 begin
@@ -303,6 +306,9 @@ begin
         round(1000 * (p^.time_base.num / p^.time_base.den * p^.Duration))
     else
       Result.Duration := round(1000 * (fmt_ctx.Duration / AV_TIME_BASE));
+    // adjust real duration for .vob
+    // if fmt_ctx.start_time <> AV_NOPTS_VALUE then
+    // dec(Result.Duration, round(1000 * (fmt_ctx.start_time / AV_TIME_BASE)));
     Result.FrameRate := -1;
     if p^.avg_frame_rate.den > 0 then // this should always be true ...
       Result.FrameRate := round(p^.avg_frame_rate.num / p^.avg_frame_rate.den)
@@ -323,7 +329,7 @@ begin
 end;
 
 procedure GrabFrame(const bm: TBitmap; const Videofile: string;
-  FrameNumber: integer);
+  FrameNumber: integer; DeInterlaceIfNecessary: boolean = false);
 var
   fmt_ctx: PAVFormatContext;
   video_dec_ctx: PAVCodecContext;
@@ -344,10 +350,46 @@ var
   nh: integer;
   temp: PAVFrame;
   p: TVideoProps;
+  args: array [0 .. 512 - 1] of AnsiChar;
+  buffersink_ctx: PAVFilterContext;
+  buffersrc_ctx: PAVFilterContext;
+  filter_graph: PAVFilterGraph;
+  FilterInitialized: boolean;
+  inputs, outputs: PAVFilterInOut;
+
+  procedure InitFiltergraph;
+  begin
+    If FilterInitialized then
+      exit;
+    // Configure the de-interlace filter (yadif)
+    snprintf(@args[0], sizeof(args),
+      'buffer=video_size=%dx%d:pix_fmt=%d:time_base=1/1:pixel_aspect=0/1[in];[in]yadif[out];[out]buffersink',
+      video_dec_ctx.Width, video_dec_ctx.Height, video_dec_ctx.pix_fmt);
+    filter_graph := avfilter_graph_alloc();
+    inputs := nil;
+    outputs := nil;
+    ret := avfilter_graph_parse2(filter_graph, PAnsiChar(@args[0]), @inputs,
+      @outputs);
+    Assert(ret >= 0);
+    ret := avfilter_graph_config(filter_graph, nil);
+    Assert(ret >= 0);
+    buffersrc_ctx := avfilter_graph_get_filter(filter_graph, 'Parsed_buffer_0');
+    buffersink_ctx := avfilter_graph_get_filter(filter_graph,
+      'Parsed_buffersink_2');
+    Assert(buffersrc_ctx <> nil);
+    Assert(buffersink_ctx <> nil);
+
+    FilterInitialized := true;
+  end;
+
 begin
   fmt_ctx := nil;
   video_dec_ctx := nil;
   frame := nil;
+  FilterInitialized := false;
+  filter_graph := nil;
+  inputs := nil;
+  outputs := nil;
   p := GetVideoProps(Videofile);
   for X := 0 to 3 do
     video_dst_data[X] := nil;
@@ -359,6 +401,7 @@ begin
   (* retrieve stream information *)
   ret := avformat_find_stream_info(fmt_ctx, nil);
   Assert(ret >= 0);
+
 
   open_decoder_context(@video_stream_idx, @video_dec_ctx, fmt_ctx,
     AVMEDIA_TYPE_VIDEO);
@@ -385,12 +428,11 @@ begin
     pkt.size := 0;
     video_frame_count := 0;
 
-    (* read frame FrameNumber-1 frames from the file *)
-
-    while (video_frame_count < FrameNumber - 1) do
+    while (video_frame_count < FrameNumber-1) do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
-      Assert(ret >= 0);
+      if ret < 0 then
+        break;
       if pkt.stream_index <> video_stream_idx then
       begin
         av_packet_unref(@pkt);
@@ -402,28 +444,54 @@ begin
       ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
       if got_frame <> 0 then
         inc(video_frame_count);
-      Assert(ret >= 0);
       av_packet_unref(@pkt);
     end;
+    if (ret < 0) or (video_frame_count < FrameNumber-1) then
+      raise exception.create('Frame Number ' + IntToStr(FrameNumber) +
+        ' cannot be found');
 
     got_frame := 0;
     // Read the next meaningful videoframe
     while (got_frame = 0) do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
-      Assert(ret >= 0);
+      if ret < 0 then
+        break;
       if pkt.stream_index <> video_stream_idx then
       begin
         av_packet_unref(@pkt);
         Continue;
       end;
       got_frame := 0;
-      ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
-      Assert(ret >= 0);
+      avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
+      // de-interlace the frame if necessary
+      if DeInterlaceIfNecessary and (got_frame <> 0) and (frame.interlaced_frame <> 0) then
+      begin
+        InitFiltergraph;
+        av_buffersrc_add_frame(buffersrc_ctx, frame);
+        while true do
+        begin
+          ret := av_buffersink_get_frame(buffersink_ctx, frame);
+          // AVError_EAgain means that more data are needed to fill the frame
+          if (ret = AVERROR_EAGAIN) or (ret = AVERROR_EOF) or
+            (ret = AVERROR_EDEADLK) then
+          begin
+            got_frame := 0;
+            break;
+          end;
+          Assert(ret >= 0);
+          got_frame := 1;
+          break;
+        end;
+      end;
       av_packet_unref(@pkt);
     end;
+    if got_frame = 0 then
+      raise exception.create('Frame Number ' + IntToStr(FrameNumber) +
+        ' cannot be found');
+
     // Convert the frame to pf32-Bitmap
-    // Some video formats don't works nicely with TBitmap,
+    // Some video formats don't work nicely with TBitmap,
     // So we convert to BGRA-Frame first
     temp := av_frame_alloc;
     try
@@ -439,6 +507,12 @@ begin
       av_frame_free(@temp);
     end;
   finally
+    if assigned(inputs) then
+      avfilter_inout_free(@inputs);
+    if assigned(outputs) then
+      avfilter_inout_free(@outputs);
+    if assigned(filter_graph) then
+      avfilter_graph_free(@filter_graph);
     av_frame_free(@frame);
     avcodec_free_context(@video_dec_ctx);
     sws_freeContext(convertCtx);
@@ -732,10 +806,12 @@ var
   bps: integer;
   asp: double;
   elapsed, start, VideoTime: int64;
-  FrameCount, DroppedFrames: integer;
+  FrameCount: integer;
   quit: boolean;
   RectW, RectH, bmW, bmH: integer;
   TimeBaseMS: TAVRational;
+  PacketTime: int64;
+  StartTime: int64;
 begin
   RectW := aRect.Right - aRect.Left;
   RectH := aRect.Bottom - aRect.Top;
@@ -746,12 +822,11 @@ begin
   frame := nil;
   for X := 0 to 3 do
     video_dst_data[X] := nil;
-  TimeBaseMS := av_make_q(1, 1000);
   FrameCount := 0;
-  DroppedFrames := 0;
   bm := TBitmap.create;
   try
     p := GetVideoProps(Videofile);
+    TimeBaseMS := av_make_q(1, 1000);
     // Calculate the display rect
     DisplayRect.Left := 0;
     DisplayRect.Top := 0;
@@ -768,11 +843,11 @@ begin
       DisplayRect.Right := RectW;
       DisplayRect.Bottom := round(RectW / asp);
     end;
-    //This prevents some weird artifacts from showing up more often, like an extra vertical bar to the left
-    //Some bug in FFMPEG?
-    if (DisplayRect.Right mod 4 = 0) then
+    // This prevents some weird artifacts from showing up more often, like an extra vertical bar to the left
+    // Some bug in FFMPEG?
+    if (DisplayRect.Right mod 2 = 0) then
       dec(DisplayRect.Right);
-    if (DisplayRect.Bottom mod 4 = 0) then
+    if (DisplayRect.Bottom mod 2 = 0) then
       dec(DisplayRect.Bottom);
 
     bm.PixelFormat := pf32bit;
@@ -792,6 +867,9 @@ begin
     (* retrieve stream information *)
     ret := avformat_find_stream_info(fmt_ctx, nil);
     Assert(ret >= 0);
+
+    StartTime := round(1000 * fmt_ctx.start_time / AV_TIME_BASE) +
+      VideoStartTime;
 
     open_decoder_context(@video_stream_idx, @video_dec_ctx, fmt_ctx,
       AVMEDIA_TYPE_VIDEO);
@@ -814,7 +892,7 @@ begin
       pkt.size := 0;
 
       (* read packages until VideoStartTime *)
-      VideoTime := -VideoStartTime;
+      VideoTime := -StartTime;
       while VideoTime < 0 do
       begin
         ret := av_read_frame(fmt_ctx, @pkt);
@@ -825,8 +903,11 @@ begin
           av_packet_unref(@pkt);
           Continue;
         end;
-        VideoTime := av_rescale_q(max(pkt.pts, pkt.dts), p.VideoTimeBase,
-          TimeBaseMS) - VideoStartTime;
+        PacketTime := pkt.dts;
+        if PacketTime < 0 then
+          PacketTime := pkt.pts;
+        VideoTime := av_rescale_q(PacketTime, p.VideoTimeBase, TimeBaseMS) -
+          StartTime;
         av_packet_unref(@pkt);
       end;
       if assigned(OnStart) then
@@ -843,29 +924,31 @@ begin
           av_packet_unref(@pkt);
           Continue;
         end;
-        VideoTime := av_rescale_q(max(pkt.pts, pkt.dts), p.VideoTimeBase,
-          TimeBaseMS) - VideoStartTime;
-        inc(FrameCount);
+        PacketTime := pkt.dts;
+        if PacketTime < 0 then
+          PacketTime := pkt.pts;
+        VideoTime := av_rescale_q(PacketTime, p.VideoTimeBase, TimeBaseMS) -
+          StartTime;
         got_frame := 0;
         (* decode video frame *)
         // !avcodec_decode_video2 is deprecated, but I couldn't get
         // the replacement avcode_send_packet and avcodec_receive_frame to work
+        avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
+        // Convert the frame to pf32-Bitmap
+        if got_frame <> 0 then
         begin
-          ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
-          Assert(ret >= 0);
-          // Convert the frame to pf32-Bitmap
-          if got_frame <> 0 then
+          elapsed := TimeGetTime - start;
+          if elapsed < VideoTime then
           begin
-            ret := sws_scale(convertCtx, @frame.data, @frame.linesize, 0,
-              frame.Height, @row, @bps);
-            Assert(ret >= 0);
-            elapsed := TimeGetTime - start;
-            if elapsed < VideoTime then
-              sleep(VideoTime - elapsed);
+            sleep(min(VideoTime - elapsed, 2000));
+            // prevent eternal sleep
+            sws_scale(convertCtx, @frame.data, @frame.linesize, 0, frame.Height,
+              @row, @bps);
             BitBlt(aCanvas.Handle, DisplayRect.Left, DisplayRect.Top, bmW, bmH,
               bm.Canvas.Handle, 0, 0, SRCCopy);
           end;
         end;
+        inc(FrameCount);
         if FrameCount mod 20 = 0 then
           if assigned(OnStopQuery) then
           begin
@@ -900,7 +983,7 @@ end;
 
 type
   TContributor = record
-    Min, High: integer;
+    min, High: integer;
     // Min: start source pixel
     // High+1: number of source pixels to contribute to the result
     Weights: array of integer; // doubles scaled by $800
@@ -959,35 +1042,35 @@ begin
     xCenter := (X + 0.5) * scale;
     TrueMin := Ceil(xCenter - rr + SourceStart - 1);
     TrueMax := Floor(xCenter + rr + SourceStart);
-    Contribs[X].Min := Min(max(TrueMin, 0), SourceSize - 1);
+    Contribs[X].min := min(max(TrueMin, 0), SourceSize - 1);
     // make sure not to read in negative pixel locations
-    Mx := max(Min(TrueMax, SourceSize - 1), 0);
+    Mx := max(min(TrueMax, SourceSize - 1), 0);
     // make sure not to read past w1-1 in the source
-    Contribs[X].High := Mx - Contribs[X].Min;
+    Contribs[X].High := Mx - Contribs[X].min;
     Assert(Contribs[X].High >= 0); // hasn't failed lately:)
     // High=Number of contributing pixels minus 1
     SetLength(Contribs[X].Weights, Contribs[X].High + 1);
     with Contribs[X] do
     begin
-      x1 := delta * (Min - SourceStart - xCenter);
+      x1 := delta * (min - SourceStart - xCenter);
       for j := 0 to High do
       begin
         x2 := x1 + delta;
         Weights[j] := round($800 * (AntiMyFilter(x2) - AntiMyFilter(x1)));
         x1 := x2;
       end;
-      for j := TrueMin - Min to -1 do
+      for j := TrueMin - min to -1 do
       begin
         // assume the first pixel to be repeated
-        x1 := delta * (Min + j - SourceStart - xCenter);
+        x1 := delta * (min + j - SourceStart - xCenter);
         x2 := x1 + delta;
         Weights[0] := Weights[0] +
           round($800 * (AntiMyFilter(x2) - AntiMyFilter(x1)));
       end;
-      for j := High + 1 to TrueMax - Min do
+      for j := High + 1 to TrueMax - min do
       begin
         // assume the last pixel to be repeated
-        x1 := delta * (Min + j - SourceStart - xCenter);
+        x1 := delta * (min + j - SourceStart - xCenter);
         x2 := x1 + delta;
         Weights[High] := Weights[High] +
           round($800 * (AntiMyFilter(x2) - AntiMyFilter(x1)));
@@ -1034,8 +1117,8 @@ begin
     SourceRect.Right - SourceRect.Left, ContribsX);
   MakeContributors(Radius, OldHeight, NewHeight, SourceRect.Top,
     SourceRect.Bottom - SourceRect.Top, ContribsY);
-  ymin := ContribsY[0].Min;
-  ymax := ContribsY[NewHeight - 1].High + ContribsY[NewHeight - 1].Min;
+  ymin := ContribsY[0].min;
+  ymax := ContribsY[NewHeight - 1].High + ContribsY[NewHeight - 1].min;
 
   SetLength(rx, ymax - ymin + 1);
   SetLength(gx, ymax - ymin + 1);
@@ -1054,7 +1137,7 @@ begin
   begin
     rs := rStart;
     highx := ContribsX[X].High;
-    minx := ContribsX[X].Min;
+    minx := ContribsX[X].min;
     weightxStart := @ContribsX[X].Weights[0];
     runr := runrstart;
     rung := rungstart;
@@ -1101,7 +1184,7 @@ begin
       pT := PRGBQuad(rT);
       inc(pT, X);
       highy := ContribsY[y].High;
-      miny := ContribsY[y].Min - ymin;
+      miny := ContribsY[y].min - ymin;
       weighty := @ContribsY[y].Weights[0];
       runr := runrstart;
       rung := rungstart;
@@ -1130,9 +1213,9 @@ begin
       tr := (tr + $1FFFFF) shr 22; // "round" the result
       tg := (tg + $1FFFFF) shr 22;
       tb := (tb + $1FFFFF) shr 22;
-      pT.rgbBlue := Min(tb, 255);
-      pT.rgbGreen := Min(tg, 255);
-      pT.rgbRed := Min(tr, 255);
+      pT.rgbBlue := min(tb, 255);
+      pT.rgbGreen := min(tg, 255);
+      pT.rgbRed := min(tr, 255);
       dec(rT, Tbps);
     end; // for y
 

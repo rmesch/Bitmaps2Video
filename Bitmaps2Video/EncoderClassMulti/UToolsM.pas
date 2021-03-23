@@ -22,16 +22,14 @@ type
   TZoomSpeedEnvelope = (zeSlowSlow, zeFastSlow, zeSlowFast, zeLinear,
     zeExperiment);
 
-  ///<summary> (lScale,tScale): LeftTop as fractions of (Width,Height). sScale: Size as Fraction of Width/Height </summary>
-  TZoom=record
+  /// <summary> (lScale,tScale): LeftTop as fractions of (Width,Height). sScale: Size as Fraction of Width/Height </summary>
+  TZoom = record
     lScale, tScale, sScale: double;
-    function ToRect(Width,Height: integer): TRectF; inline;
+    function ToRect(Width, Height: integer): TRectF; inline;
   end;
 
-
-  function RectToZoom(r: TRectF; Width,Height: integer): TZoom; inline;
-  function MakeZoom(l,t,s: double): TZoom; inline;
-
+function RectToZoom(r: TRectF; Width, Height: integer): TZoom; inline;
+function MakeZoom(l, t, s: double): TZoom; inline;
 
 procedure open_decoder_context(stream_idx: PInteger; dec_ctx: PPAVCodecContext;
   fmt_ctx: PAVFormatContext; type_: TAVMediaType);
@@ -64,7 +62,8 @@ procedure CenterRect(var aRect: TRectF; BigR: TRectF);
 inline
 
 // Zoom-Pan speed modifiers
-function SlowSlow(t: double): double; inline;
+function SlowSlow(t: double): double;
+inline;
 function SlowFast(t: double): double; inline;
 function FastSlow(t: double): double; inline;
 function Linear(t: double): double; inline;
@@ -74,8 +73,8 @@ const
   EnvelopeFunction: array [TZoomSpeedEnvelope] of TEnvelopeFunction = (SlowSlow,
     FastSlow, SlowFast, Linear, Experiment);
 
-
-Procedure ExpandSizeToAspect(Width,Height: integer; AR: TAVRational; var NewWidth,NewHeight: integer);
+Procedure ExpandSizeToAspect(Width, Height: integer; AR: TAVRational;
+  var NewWidth, NewHeight: integer);
 
 implementation
 
@@ -107,30 +106,31 @@ begin
   result := t;
 end;
 
- function TZoom.ToRect(Width, Height: integer): TRectF;
- begin
-   Assert((tScale+sScale<=1) and (lScale+sScale<=1),'Zoom would be outside of picture bounds');
-   Result.Left:=lScale*Width;
-   Result.Top:=tScale*Height;
-   Result.Right:=Result.Left+sScale*Width;
-   Result.Bottom:=Result.Top+sScale*Height;
- end;
+function TZoom.ToRect(Width, Height: integer): TRectF;
+begin
+  Assert((tScale + sScale <= 1) and (lScale + sScale <= 1),
+    'Zoom would be outside of picture bounds');
+  result.Left := lScale * Width;
+  result.Top := tScale * Height;
+  result.Right := result.Left + sScale * Width;
+  result.Bottom := result.Top + sScale * Height;
+end;
 
-  function RectToZoom(r: TRectF; Width,Height: integer): TZoom; inline;
-  begin
-    //the result only makes sense if r has the same aspect ratio as Width x Height
-    Assert((r.Right-r.Left>0) and (Width>0) and (Height>0));
-    Result.sScale:=(r.Right-r.Left)/Width;
-    Result.lScale:=r.Left/Width;
-    Result.tScale:=r.Top/Height;
-  end;
+function RectToZoom(r: TRectF; Width, Height: integer): TZoom; inline;
+begin
+  // the result only makes sense if r has the same aspect ratio as Width x Height
+  Assert((r.Right - r.Left > 0) and (Width > 0) and (Height > 0));
+  result.sScale := (r.Right - r.Left) / Width;
+  result.lScale := r.Left / Width;
+  result.tScale := r.Top / Height;
+end;
 
-  function MakeZoom(l,t,s: double): TZoom; inline;
-  begin
-    Result.lScale:=l;
-    Result.tScale:=t;
-    Result.sScale:=s;
-  end;
+function MakeZoom(l, t, s: double): TZoom; inline;
+begin
+  result.lScale := l;
+  result.tScale := t;
+  result.sScale := s;
+end;
 
 function Interpolate(SourceR, TargetR: TRectF; t: double): TRectF;
 begin
@@ -168,9 +168,9 @@ begin
   ret := avformat_open_input(@fmt_ctx, MarshaledAString(UTF8String(Videofile)),
     nil, nil);
   try
-    assert(ret >= 0);
+    Assert(ret >= 0);
     ret := avformat_find_stream_info(fmt_ctx, nil);
-    assert(ret >= 0);
+    Assert(ret >= 0);
     p := fmt_ctx.streams;
     sn := 0;
     result.nrVideostreams := 0;
@@ -200,7 +200,7 @@ begin
       inc(p);
       inc(sn);
     end;
-    assert(result.nrVideostreams > 0, 'No video stream found in ' + Videofile);
+    Assert(result.nrVideostreams > 0, 'No video stream found in ' + Videofile);
     p := fmt_ctx.streams;
     sn := 0;
     while sn < vsn do
@@ -242,7 +242,7 @@ begin
   opts := nil;
 
   ret := av_find_best_stream(fmt_ctx, type_, -1, -1, nil, 0);
-  assert(ret >= 0);
+  Assert(ret >= 0);
   stream_index := ret;
   p := fmt_ctx.streams;
   inc(p, stream_index);
@@ -250,20 +250,20 @@ begin
 
   (* find decoder for the stream *)
   avdec := avcodec_find_decoder(st.codecpar.codec_id);
-  assert(avdec <> nil);
+  Assert(avdec <> nil);
 
   (* Allocate a codec context for the decoder *)
   dec_ctx^ := avcodec_alloc_context3(avdec);
-  assert(dec_ctx^ <> nil);
+  Assert(dec_ctx^ <> nil);
 
   (* Copy codec parameters from input stream to output codec context *)
   ret := avcodec_parameters_to_context(dec_ctx^, st.codecpar);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 
   (* Init the decoders, without reference counting *)
   av_dict_set(@opts, 'refcounted_frames', '0', 0);
   ret := avcodec_open2(dec_ctx^, avdec, @opts);
-  assert(ret >= 0);
+  Assert(ret >= 0);
   stream_idx^ := stream_index;
 
 end;
@@ -299,11 +299,11 @@ begin
   (* open input file, and allocate format context *)
   ret := avformat_open_input(@fmt_ctx, MarshaledAString(UTF8String(Videofile)),
     nil, nil);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 
   (* retrieve stream information *)
   ret := avformat_find_stream_info(fmt_ctx, nil);
-  assert(ret >= 0);
+  Assert(ret >= 0);
 
   open_decoder_context(@video_stream_idx, @video_dec_ctx, fmt_ctx,
     AVMEDIA_TYPE_VIDEO);
@@ -320,7 +320,7 @@ begin
     nh := Height;
   ret := av_image_alloc(@video_dst_data[0], @video_dst_linesize[0], Width,
     Height, pix_fmt, 1);
-  assert(ret >= 0);
+  Assert(ret >= 0);
   // Conversion Context to BGRA
 {$IFDEF ANDROID}
   pix_fmt_target := AV_PIX_FMT_RGBA;
@@ -331,7 +331,7 @@ begin
     pix_fmt_target, SWS_Lanczos, nil, nil, nil);
 
   frame := av_frame_alloc();
-  assert(frame <> nil);
+  Assert(frame <> nil);
   try
     (* initialize packet, set data to NULL, let the demuxer fill it *)
     av_init_packet(@pkt);
@@ -342,49 +342,52 @@ begin
     while (video_frame_count < FrameNumber - 1) do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
-      assert(ret >= 0);
+      Assert(ret >= 0);
       if pkt.stream_index <> video_stream_idx then
       begin
         av_packet_unref(@pkt);
         Continue;
       end;
-      inc(video_frame_count);
       // without decoding each frame, the grabbing doesn't work
       // except for some formats
       got_frame := 0;
       ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
-      assert(ret >= 0);
+      if got_frame <> 0 then
+        inc(video_frame_count);
+      Assert(ret >= 0);
       av_packet_unref(@pkt);
     end;
     while (video_frame_count = FrameNumber - 1) do
     begin
       ret := av_read_frame(fmt_ctx, @pkt);
-      assert(ret >= 0);
+      Assert(ret >= 0);
       if pkt.stream_index <> video_stream_idx then
       begin
         av_packet_unref(@pkt);
         Continue;
       end;
-      inc(video_frame_count);
-
+      (* decode video frame *)
+      // !avcodec_decode_video2 is deprecated, but I couldn't get
+      // the replacement avcode_send_packet and avcodec_receive_frame to work
+      got_frame := 0;
+      ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
+      Assert(ret >= 0);
+      if got_frame <> 0 then
+      begin
+        // Convert the frame to 32bit-Bitmap
+        bm.SetSize(Width, nh);
+        Assert(bm.Map(TMapAccess.ReadWrite, BitData));
+        row := BitData.data;
+        // Always use Pitch instead of BytesPerLine!
+        bps := BitData.Pitch;
+        ret := sws_scale(convertCtx, @frame.data, @frame.linesize, 0, Height,
+          @row, @bps);
+        Assert(ret >= 0);
+        bm.Unmap(BitData);
+        inc(video_frame_count);
+      end;
     end;
-    assert(pkt.stream_index = video_stream_idx);
-    (* decode video frame *)
-    // !avcodec_decode_video2 is deprecated, but I couldn't get
-    // the replacement avcode_send_packet and avcodec_receive_frame to work
-    got_frame := 0;
-    ret := avcodec_decode_video2(video_dec_ctx, frame, @got_frame, @pkt);
-    assert(ret >= 0);
-    // Convert the frame to 32bit-Bitmap
-    bm.SetSize(Width, nh);
-    assert(bm.Map(TMapAccess.ReadWrite, BitData));
-    row := BitData.data;
-    // Always use Pitch instead of BytesPerLine!
-    bps := BitData.Pitch;
-    ret := sws_scale(convertCtx, @frame.data, @frame.linesize, 0, Height,
-      @row, @bps);
-    assert(ret >= 0);
-    bm.Unmap(BitData);
+
   finally
     av_packet_unref(@pkt);
     av_frame_free(@frame);
@@ -394,25 +397,20 @@ begin
   end;
 end;
 
-
-
-Procedure ExpandSizeToAspect(Width,Height: integer; AR: TAVRational; var NewWidth,NewHeight: integer);
+Procedure ExpandSizeToAspect(Width, Height: integer; AR: TAVRational;
+  var NewWidth, NewHeight: integer);
 begin
   if Width / Height < AR.num / AR.den then
-    // Add background right and left
-    begin
-      NewHeight := Height;
-      NewWidth := round(Height / AR.den * AR.num);
-    end
-    else
-    begin
-      NewWidth := Width;
-      NewHeight := round(Width * AR.den / AR.num);
-    end;
+  // Add background right and left
+  begin
+    NewHeight := Height;
+    NewWidth := round(Height / AR.den * AR.num);
+  end
+  else
+  begin
+    NewWidth := Width;
+    NewHeight := round(Width * AR.den / AR.num);
+  end;
 end;
-
-
-
-
 
 end.
